@@ -13,6 +13,10 @@ export class MainMenu extends Scene {
   stars: Phaser.Physics.Arcade.Group;
   score: number;
   scoreText: Phaser.GameObjects.Text;
+  
+  // Input tracking for better jump detection
+  private jumpKey: Phaser.Input.Keyboard.Key;
+  private wasJumpDown: boolean = false;
 
   constructor() {
     super('MainMenu');
@@ -31,10 +35,11 @@ export class MainMenu extends Scene {
     this.player = new Player(this, 100, 450);
     this.physics.add.collider(this.player, this.platforms);
 
-
     if(this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
+      this.jumpKey = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP);
     }
+    
     this.stars = this.physics.add.group({
       key: 'star',
       repeat: 11,
@@ -55,21 +60,27 @@ export class MainMenu extends Scene {
     EventBus.emit('current-scene-ready', this);
   }
 
-  update() {
-    if (this.cursors.left.isDown) {
-      this.player.moveLeft();
-    } else if (this.cursors.right.isDown) {
-      this.player.moveRight();
-    } else {
-      this.player.idle();
-    }
+  update(time: number, delta: number) {
+    // Handle input with proper jump detection
+    const leftPressed = this.cursors.left.isDown;
+    const rightPressed = this.cursors.right.isDown;
+    const jumpPressed = this.jumpKey.isDown;
+    const jumpJustPressed = jumpPressed && !this.wasJumpDown;
 
-    if (this.cursors.up.isDown) {
-      this.player.jump();
-    }
+    // Update player input state
+    this.player.setLeftPressed(leftPressed);
+    this.player.setRightPressed(rightPressed);
+    this.player.setJumpPressed(jumpPressed, jumpJustPressed);
+
+    // Update player physics and state
+    this.player.update(time, delta);
+
+    // Track jump state for next frame
+    this.wasJumpDown = jumpPressed;
   }
 
-  collectStar(player, star) {
+  collectStar(object1: any, object2: any) {
+    const star = object2 as Phaser.Physics.Arcade.Sprite;
     star.disableBody(true, true);
     this.score = this.score + 10;
     this.scoreText.setText('Score: ' + this.score);
@@ -78,5 +89,4 @@ export class MainMenu extends Scene {
   changeScene() {
 
   }
-
 }
