@@ -109,17 +109,14 @@ export class MainMenu extends Scene {
   private setupCamera(): void {
     const camera = this.cameras.main;
     
-    // Set camera bounds for the larger level (now with vertical space)
-    camera.setBounds(0, 0, 3200, 1200);
+    // Very tight following - player stays perfectly centered
+    camera.startFollow(this.player, true, 0.2, 0.2);
     
-    // Start following the player with smooth interpolation
-    camera.startFollow(this.player, true, 0.05, 0.05);
+    // Remove deadzone - camera follows every movement
+    camera.setDeadzone(0, 0);
     
-    // Set up lookahead - camera will anticipate player movement
-    camera.setFollowOffset(0, 50); // Slight downward offset to see more ground ahead
-    
-    // Configure deadzone for smooth following (now supports vertical movement)
-    camera.setDeadzone(150, 150); // Increased vertical deadzone for better vertical following
+    // No offset - keep player perfectly centered
+    camera.setFollowOffset(0, 0);
     
     // Set zoom if needed (1 = normal, >1 = zoomed in, <1 = zoomed out)
     camera.setZoom(1);
@@ -143,43 +140,8 @@ export class MainMenu extends Scene {
     // Update player physics and state
     this.player.update(time, delta);
 
-    // Update camera lookahead based on player movement
-    this.updateCameraLookahead();
-
     // Track jump state for next frame
     this.wasJumpDown = jumpPressed;
-  }
-
-  private updateCameraLookahead(): void {
-    const camera = this.cameras.main;
-    const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
-    
-    // Calculate horizontal lookahead based on velocity
-    const velocityX = playerBody.velocity.x;
-    const maxLookahead = 100; // Maximum pixels to look ahead
-    const lookaheadX = Math.sign(velocityX) * Math.min(Math.abs(velocityX) / 3, maxLookahead);
-    
-    // Vertical lookahead - look down when falling, up when jumping
-    const velocityY = playerBody.velocity.y;
-    let lookaheadY = 50; // Default downward offset
-    
-    if (velocityY < -200) {
-      // Jumping - look slightly up
-      lookaheadY = 20;
-    } else if (velocityY > 200) {
-      // Falling fast - look further down
-      lookaheadY = 80;
-    }
-    
-    // Smoothly interpolate to new offset to avoid camera snapping
-    const currentOffsetX = camera.followOffset.x;
-    const currentOffsetY = camera.followOffset.y;
-    
-    const lerpFactor = 0.02; // Lower = smoother, higher = more responsive
-    const newOffsetX = Phaser.Math.Linear(currentOffsetX, lookaheadX, lerpFactor);
-    const newOffsetY = Phaser.Math.Linear(currentOffsetY, lookaheadY, lerpFactor);
-    
-    camera.setFollowOffset(newOffsetX, newOffsetY);
   }
 
   collectStar(object1: any, object2: any) {
