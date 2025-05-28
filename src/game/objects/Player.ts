@@ -21,6 +21,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private jumpBufferTime: number = 0;
   private isGrounded: boolean = false;
   private jumpsRemaining: number = this.MAX_JUMPS;
+  private hasJumped: boolean = false; // Track if player has actually jumped
   
   // Input tracking
   private leftPressed: boolean = false;
@@ -85,9 +86,10 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     
     if (this.isGrounded) {
       this.lastGroundedTime = time;
-      // Reset jumps when landing
+      // Reset jumps and jump state when landing
       if (!wasGrounded) {
         this.jumpsRemaining = this.MAX_JUMPS;
+        this.hasJumped = false; // Reset jump state when landing
       }
       // Reset drag when grounded for better ground control
       this.setDragX(this.FRICTION);
@@ -157,8 +159,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const canCoyoteJump = time - this.lastGroundedTime <= this.COYOTE_TIME;
     const hasJumpBuffer = time - this.jumpBufferTime <= this.JUMP_BUFFER_TIME;
     
-    // Can jump if: grounded, coyote time, or have jumps remaining (double jump)
-    const canJump = (this.isGrounded || canCoyoteJump || this.jumpsRemaining > 0) && this.jumpsRemaining > 0;
+    // Can jump if:
+    // 1. Grounded or within coyote time (first jump)
+    // 2. In air but has jumped before and has jumps remaining (double jump)
+    const canFirstJump = (this.isGrounded || canCoyoteJump) && this.jumpsRemaining > 0;
+    const canDoubleJump = !this.isGrounded && this.hasJumped && this.jumpsRemaining > 0;
+    const canJump = canFirstJump || canDoubleJump;
     
     if (hasJumpBuffer && canJump) {
       this.performJump();
@@ -170,6 +176,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private performJump(): void {
     this.setVelocityY(this.JUMP_VELOCITY);
     this.jumpsRemaining--;
+    this.hasJumped = true; // Mark that player has jumped
     
     // Reset coyote time to prevent multiple jumps from coyote time
     if (this.jumpsRemaining === this.MAX_JUMPS - 1) {
