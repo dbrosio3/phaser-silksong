@@ -13,10 +13,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly COYOTE_TIME = 150; // ms after leaving ground where jump is still allowed
   private readonly JUMP_BUFFER_TIME = 100; // ms before landing where jump input is remembered
   
+  // Double jump settings
+  private readonly MAX_JUMPS = 2; // Allow double jump
+  
   // State tracking
   private lastGroundedTime: number = 0;
   private jumpBufferTime: number = 0;
   private isGrounded: boolean = false;
+  private jumpsRemaining: number = this.MAX_JUMPS;
   
   // Input tracking
   private leftPressed: boolean = false;
@@ -76,10 +80,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   private updateGroundedState(time: number): void {
+    const wasGrounded = this.isGrounded;
     this.isGrounded = this.body && (this.body as Phaser.Physics.Arcade.Body).blocked.down || false;
     
     if (this.isGrounded) {
       this.lastGroundedTime = time;
+      // Reset jumps when landing
+      if (!wasGrounded) {
+        this.jumpsRemaining = this.MAX_JUMPS;
+      }
       // Reset drag when grounded for better ground control
       this.setDragX(this.FRICTION);
     } else {
@@ -144,11 +153,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.jumpBufferTime = time;
     }
 
-    // Check if we can jump (coyote time or grounded)
+    // Check if we can jump
     const canCoyoteJump = time - this.lastGroundedTime <= this.COYOTE_TIME;
     const hasJumpBuffer = time - this.jumpBufferTime <= this.JUMP_BUFFER_TIME;
     
-    if (hasJumpBuffer && (this.isGrounded || canCoyoteJump)) {
+    // Can jump if: grounded, coyote time, or have jumps remaining (double jump)
+    const canJump = (this.isGrounded || canCoyoteJump || this.jumpsRemaining > 0) && this.jumpsRemaining > 0;
+    
+    if (hasJumpBuffer && canJump) {
       this.performJump();
       // Clear jump buffer after successful jump
       this.jumpBufferTime = 0;
@@ -157,8 +169,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private performJump(): void {
     this.setVelocityY(this.JUMP_VELOCITY);
-    // Reset coyote time to prevent multiple jumps
-    this.lastGroundedTime = 0;
+    this.jumpsRemaining--;
+    
+    // Reset coyote time to prevent multiple jumps from coyote time
+    if (this.jumpsRemaining === this.MAX_JUMPS - 1) {
+      this.lastGroundedTime = 0;
+    }
   }
 
   private updateAnimations(): void {
