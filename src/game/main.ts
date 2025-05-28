@@ -10,8 +10,8 @@ import type Phaser from 'phaser';
 //  https://docs.phaser.io/api-documentation/typedef/types-core#gameconfig
 const config: Phaser.Types.Core.GameConfig = {
   type: AUTO,
-  width: 800,
-  height: 600,
+  width: 1440,
+  height: 788,
   parent: 'game-container',
   backgroundColor: '#028af8',
   physics: {
