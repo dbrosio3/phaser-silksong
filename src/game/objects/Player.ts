@@ -8,37 +8,45 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly AIR_ACCELERATION = 800; // Higher = more air control
   private readonly FRICTION = 3000; // Higher = stops sliding sooner
   private readonly AIR_FRICTION = 800; // Higher = less air sliding
-  
+
   // Dash constants
   private readonly DASH_SPEED = 2000; // Dash speed
   private readonly DASH_DURATION = 200; // ms
   private readonly DASH_COOLDOWN = 500; // ms between dashes
-  
+
+  // Attack constants
+  private readonly WHIP_DURATION = 300; // ms (roughly 6 frames at 28fps)
+
   // Coyote time and jump buffering
   private readonly COYOTE_TIME = 150; // ms after leaving ground where jump is still allowed
   private readonly JUMP_BUFFER_TIME = 100; // ms before landing where jump input is remembered
-  
+
   // Double jump settings
   private readonly MAX_JUMPS = 2; // Allow double jump
-  
+
   // State tracking
   private lastGroundedTime: number = 0;
   private jumpBufferTime: number = 0;
   private isGrounded: boolean = false;
   private jumpsRemaining: number = this.MAX_JUMPS;
   private hasJumped: boolean = false; // Track if player has actually jumped
-  
+
   // Direction and dash state
   private facingDirection: number = 1; // 1 for right, -1 for left (always has a direction)
   private isDashing: boolean = false;
   private dashStartTime: number = 0;
   private lastDashTime: number = 0;
-  
+
+  // Attack state
+  private isAttacking: boolean = false;
+  private attackStartTime: number = 0;
+
   // Input tracking
   private leftPressed: boolean = false;
   private rightPressed: boolean = false;
   private jumpJustPressed: boolean = false;
   private dashJustPressed: boolean = false;
+  private attackJustPressed: boolean = false;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     super(scene, x, y, 'hornet');
@@ -48,10 +56,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Reduce bounce for less floaty feel
     this.setBounce(0.1);
     this.setCollideWorldBounds(true);
-    
+
+    // Set depth to be in front of the sword
+    this.setDepth(1);
+
     // Set drag for better control
     this.setDragX(this.FRICTION);
-    
+
     this.initAnimations();
   }
 
@@ -60,7 +71,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.anims.create({
       key: 'run',
       frames: this.anims.generateFrameNumbers('hornet', {
-        start: 1, 
+        start: 1,
         end: 8
       }),
       frameRate: 12,
@@ -78,7 +89,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.anims.create({
       key: 'jump',
       frames: this.anims.generateFrameNumbers('hornet', {
-        start: 10, 
+        start: 10,
         end: 15
       }),
       frameRate: 8,
@@ -89,11 +100,22 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.anims.create({
       key: 'dash',
       frames: this.anims.generateFrameNumbers('hornet', {
-        start: 37, 
+        start: 37,
         end: 38
       }),
       frameRate: 12,
       repeat: -1
+    });
+
+    // Hornet whip attack animation - row 4, columns 0-5
+    this.anims.create({
+      key: 'whip',
+      frames: this.anims.generateFrameNumbers('hornet', {
+        start: 64,
+        end: 69
+      }),
+      frameRate: 24,
+      repeat: 0 // Play once, don't repeat
     });
   }
 
@@ -102,6 +124,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   update(time: number, delta: number): void {
     this.updateGroundedState(time);
     this.handleDashing(time);
+    this.handleAttacking(time);
     this.handleMovement(delta);
     this.handleJumping(time);
     this.updateAnimations();
@@ -110,7 +133,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private updateGroundedState(time: number): void {
     const wasGrounded = this.isGrounded;
     this.isGrounded = this.body && (this.body as Phaser.Physics.Arcade.Body).blocked.down || false;
-    
+
     if (this.isGrounded) {
       this.lastGroundedTime = time;
       // Reset jumps and jump state when landing
@@ -131,14 +154,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.isDashing && time - this.dashStartTime >= this.DASH_DURATION) {
       this.isDashing = false;
     }
-    
+
     // Maintain dash momentum and compensate for gravity during dash
     if (this.isDashing) {
       const body = this.body as Phaser.Physics.Arcade.Body;
       body.setVelocityX(this.facingDirection * this.DASH_SPEED);
       body.setVelocityY(0); // Continuously compensate for gravity
     }
-    
+
     // Check if player wants to start a new dash
     if (this.dashJustPressed && !this.isDashing) {
       // Check cooldown
@@ -153,41 +176,58 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.isDashing = true;
     this.dashStartTime = time;
     this.lastDashTime = time;
-    
+
     // Set initial dash velocity in facing direction
     const body = this.body as Phaser.Physics.Arcade.Body;
     body.setVelocityX(this.facingDirection * this.DASH_SPEED);
-    
+
     // Compensate for gravity during dash - maintain current Y velocity
     body.setVelocityY(0); // Keep horizontal dash trajectory
   }
 
+  private handleAttacking(time: number): void {
+    // Check if attack duration is over
+    if (this.isAttacking && time - this.attackStartTime >= this.WHIP_DURATION) {
+      this.isAttacking = false;
+    }
+
+    // Check if player wants to start a new attack
+    if (this.attackJustPressed && !this.isAttacking && !this.isDashing) {
+      this.startAttack(time);
+    }
+  }
+
+  private startAttack(time: number): void {
+    this.isAttacking = true;
+    this.attackStartTime = time;
+  }
+
   private handleMovement(delta: number): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
-    
+
     // Skip normal movement logic if dashing (handled in handleDashing)
     if (this.isDashing) {
       return;
     }
-    
+
     const acceleration = this.isGrounded ? this.ACCELERATION : this.AIR_ACCELERATION;
-    
+
     let currentDirection = 0;
     if (this.leftPressed && !this.rightPressed) {
       currentDirection = -1;
     } else if (this.rightPressed && !this.leftPressed) {
       currentDirection = 1;
     }
-    
+
     // Update facing direction when moving
     if (currentDirection !== 0) {
       this.facingDirection = currentDirection;
     }
     // Note: When no input, facing direction persists (this is the key change!)
-    
+
     // Check if we're switching directions (left↔right)
     const switchingDirections = Math.sign(body.velocity.x) !== 0 && currentDirection !== 0 && Math.sign(body.velocity.x) !== currentDirection;
-    
+
     if (currentDirection === -1) {
       // Moving left
       if (switchingDirections) {
@@ -225,14 +265,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Check if we can jump
     const canCoyoteJump = time - this.lastGroundedTime <= this.COYOTE_TIME;
     const hasJumpBuffer = time - this.jumpBufferTime <= this.JUMP_BUFFER_TIME;
-    
+
     // Can jump if:
     // 1. Grounded or within coyote time (first jump)
     // 2. In air but has jumped before and has jumps remaining (double jump)
     const canFirstJump = (this.isGrounded || canCoyoteJump) && this.jumpsRemaining > 0;
     const canDoubleJump = !this.isGrounded && this.hasJumped && this.jumpsRemaining > 0;
     const canJump = canFirstJump || canDoubleJump;
-    
+
     if (hasJumpBuffer && canJump) {
       this.performJump();
       // Clear jump buffer after successful jump
@@ -244,7 +284,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setVelocityY(this.JUMP_VELOCITY);
     this.jumpsRemaining--;
     this.hasJumped = true; // Mark that player has jumped
-    
+
     // Reset coyote time to prevent multiple jumps from coyote time
     if (this.jumpsRemaining === this.MAX_JUMPS - 1) {
       this.lastGroundedTime = 0;
@@ -253,8 +293,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private updateAnimations(): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
-    
-    if (this.isDashing) {
+
+    if (this.isAttacking) {
+      // Attacking - play whip animation and flip sprite based on facing direction
+      this.anims.play('whip', true);
+      this.setFlipX(this.facingDirection < 0);
+    } else if (this.isDashing) {
       // Dashing - play dash animation and flip sprite based on facing direction
       this.anims.play('dash', true);
       this.setFlipX(this.facingDirection < 0);
@@ -288,9 +332,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   // Future action methods - ready for implementation
   setAttackPressed(pressed: boolean, justPressed: boolean = false): void {
-    // TODO: Implement attack mechanics
-    // this.attackPressed = pressed;
-    // this.attackJustPressed = justPressed;
+    this.attackJustPressed = justPressed;
   }
 
   setDashPressed(pressed: boolean, justPressed: boolean = false): void {
@@ -331,5 +373,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   jump(): void {
     this.setJumpPressed(true, true);
+  }
+
+  // Getters for sword to access player state
+  get currentFacingDirection(): number {
+    return this.facingDirection;
+  }
+
+  get currentlyAttacking(): boolean {
+    return this.isAttacking;
   }
 }
