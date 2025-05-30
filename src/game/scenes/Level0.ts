@@ -4,6 +4,7 @@ import Phaser from 'phaser';
 import { EventBus } from '../EventBus';
 import { Player } from '../objects/Player';
 import { Sword } from '../objects/Sword';
+import { PlatformUtils } from '../utils/PlatformUtils';
 
 export class Level0 extends Scene {
   background: GameObjects.Image;
@@ -40,7 +41,7 @@ export class Level0 extends Scene {
     // Create a tiled background that covers the entire level
     for (let x = 0; x < 3200; x += 1536) {
       for (let y = 0; y < 1200; y += 1024) {
-        this.add.image(x + 768, y + 512, 'sky');
+        this.add.image(x + 768, y + 1000, 'sky');
       }
     }
 
@@ -51,13 +52,12 @@ export class Level0 extends Scene {
 
     // Ground floor - using new 1024×451 sprite
     // Since new sprite is ~2.5x wider and ~14x taller than original, adjust scale accordingly
-    // Ground level platforms
-    this.platforms.create(512, 1330, 'ground').setScale(1.5, 1).refreshBody(); // Left section
-    this.platforms.create(1536, 1330, 'ground').setScale(1.5, 1).refreshBody(); // Center section
-    this.platforms.create(2560, 1330, 'ground').setScale(1.5, 1).refreshBody(); // Right section
+    // Ground level platforms with 5% padding removed from top using preset
+    PlatformUtils.createPlatformWithPreset(this, this.platforms, 400, 1330, 'ground', 'GROUND', 1, 1); // Left section
+    PlatformUtils.createPlatformWithPreset(this, this.platforms, 2700, 1330, 'ground', 'GROUND', -1, 1); // Right section
 
-    // Simple scattered platforms using ground2 sprite
-    this.platforms.create(1500, 1000, 'ground2').setScale(0.1, 1).refreshBody(); // Low platform
+    // Simple scattered platforms using ground2 sprite with 20% padding removed all around using preset
+    PlatformUtils.createPlatformWithPreset(this, this.platforms, 1500, 1000, 'ground2', 'GROUND_2', 0.1, 1); // Low platform
     
     this.player = new Player(this, 100, 1050);
     this.physics.add.collider(this.player, this.platforms);
