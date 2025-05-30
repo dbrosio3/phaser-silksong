@@ -34,42 +34,31 @@ export class Level0 extends Scene {
   }
 
   create() {
-    // Create a tiled background that covers the entire level (now taller)
-    for (let x = 0; x < 3200; x += 800) {
-      for (let y = 0; y < 1200; y += 600) {
-        this.add.image(x + 400, y + 300, 'sky');
+    // Set black background color
+    this.cameras.main.setBackgroundColor('#000000');
+
+    // Create a tiled background that covers the entire level
+    for (let x = 0; x < 3200; x += 1536) {
+      for (let y = 0; y < 1200; y += 1024) {
+        this.add.image(x + 768, y + 512, 'sky');
       }
     }
 
-    // Set the world bounds to match our larger level (now with vertical space)
+    // Set the world bounds to match our level
     this.physics.world.setBounds(0, 0, 3200, 1200);
 
     this.platforms = this.physics.add.staticGroup();
 
-    // Staircase platform layout - ascending from left to right
-    // Ground level - long base platform
-    this.platforms.create(400, 1150, 'ground').setScale(4, 1).refreshBody();
-    this.platforms.create(1200, 1150, 'ground').setScale(4, 1).refreshBody();
+    // Ground floor - using new 1024×451 sprite
+    // Since new sprite is ~2.5x wider and ~14x taller than original, adjust scale accordingly
+    // Ground level platforms
+    this.platforms.create(512, 1330, 'ground').setScale(1.5, 1).refreshBody(); // Left section
+    this.platforms.create(1536, 1330, 'ground').setScale(1.5, 1).refreshBody(); // Center section
+    this.platforms.create(2560, 1330, 'ground').setScale(1.5, 1).refreshBody(); // Right section
 
-    // Step 1 - slightly elevated
-    this.platforms.create(800, 950, 'ground').setScale(2, 1).refreshBody();
-
-    // Step 2 - higher
-    this.platforms.create(1200, 750, 'ground').setScale(2, 1).refreshBody();
-
-    // Step 3 - even higher
-    this.platforms.create(1600, 550, 'ground').setScale(2, 1).refreshBody();
-
-    // Step 4 - highest main platform
-    this.platforms.create(2000, 350, 'ground').setScale(2, 1).refreshBody();
-
-    // Final high platform - the peak
-    this.platforms.create(2400, 150, 'ground').setScale(1.5, 1).refreshBody();
-
-    // Optional side platforms for alternative routes
-    this.platforms.create(600, 650, 'ground'); // Side platform near step 2
-    this.platforms.create(1800, 250, 'ground'); // Side platform near peak
-
+    // Simple scattered platforms using ground2 sprite
+    this.platforms.create(1500, 1000, 'ground2').setScale(0.1, 1).refreshBody(); // Low platform
+    
     this.player = new Player(this, 100, 1050);
     this.physics.add.collider(this.player, this.platforms);
 
@@ -89,30 +78,67 @@ export class Level0 extends Scene {
       };
     }
 
-    // Stars positioned to guide players up the staircase
+    // Create star idle animation
+    console.log('Creating star animation...');
+    console.log('Star texture exists:', this.textures.exists('star'));
+    
+    // Debug: Check how many frames the texture has
+    const starTexture = this.textures.get('star');
+    console.log('Star texture info:', starTexture);
+    console.log('Star frame count:', starTexture.frameTotal);
+    
+    try {
+      this.anims.create({
+        key: 'star-idle',
+        frames: [
+          { key: 'star', frame: 0 },
+          { key: 'star', frame: 1 },
+          { key: 'star', frame: 2 }
+        ],
+        frameRate: 8,
+        repeat: -1
+      });
+      console.log('Star animation created successfully');
+    } catch (error) {
+      console.error('Error creating star animation:', error);
+    }
+
+    // Stars positioned on the new platform layout
     this.stars = this.physics.add.group();
 
-    // Place stars strategically on the staircase path
+    // Adjusted star positions for the new map layout
     const starPositions = [
       // Ground level stars
-      { x: 300, y: 1100 }, { x: 500, y: 1100 }, { x: 1100, y: 1100 }, { x: 1300, y: 1100 },
-      // Step 1 stars
-      { x: 750, y: 900 }, { x: 850, y: 900 },
-      // Step 2 stars  
-      { x: 1150, y: 700 }, { x: 1250, y: 700 },
-      // Step 3 stars
-      { x: 1550, y: 500 }, { x: 1650, y: 500 },
-      // Step 4 stars
-      { x: 1950, y: 300 }, { x: 2050, y: 300 },
-      // Peak stars
-      { x: 2350, y: 100 }, { x: 2450, y: 100 },
-      // Side platform stars
-      { x: 600, y: 600 }, { x: 1800, y: 200 }
+      { x: 200, y: 1100 }, { x: 400, y: 1100 }, { x: 600, y: 1100 },
+      { x: 2200, y: 1100 }, { x: 2400, y: 1100 }, { x: 2600, y: 1100 },
+      // Step platforms
+      { x: 1150, y: 900 }, { x: 1250, y: 900 },
+      { x: 1750, y: 700 }, { x: 1850, y: 700 },
+      { x: 2350, y: 500 }, { x: 2450, y: 500 },
+      // Side platforms
+      { x: 1000, y: 600 }, { x: 2600, y: 300 }
     ];
 
     starPositions.forEach(pos => {
       const star = this.stars.create(pos.x, pos.y, 'star');
       star.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+      try {
+        // Add staggered animation timing
+        const randomDelay = Phaser.Math.Between(0, 2000); // Random delay 0-2 seconds
+        const randomStartFrame = Phaser.Math.Between(0, 2); // Random starting frame
+        
+        // Set initial frame
+        star.setFrame(randomStartFrame);
+        
+        // Start animation with delay
+        this.time.delayedCall(randomDelay, () => {
+          star.play('star-idle');
+        });
+        
+        console.log('Star animation started at', pos.x, pos.y, 'with delay', randomDelay);
+      } catch (error) {
+        console.error('Error playing star animation:', error);
+      }
     });
 
     this.physics.add.collider(this.stars, this.platforms);

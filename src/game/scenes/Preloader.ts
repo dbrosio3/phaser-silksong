@@ -11,7 +11,10 @@ export class Preloader extends Scene {
 
     this.load.image('sky', 'sky.png');
     this.load.image('ground', 'ground.png');
-    this.load.image('star', 'star.png');
+    this.load.image('ground2', 'ground_2.png');
+    this.load.spritesheet('star', 'star.png', {
+        frameWidth: 37, frameHeight: 37
+    });
     this.load.spritesheet('hornet', 'hornet.png', {
         frameWidth: 128, frameHeight: 128
     });
