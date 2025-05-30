@@ -41,7 +41,7 @@ export class MainMenu extends Scene {
     // Button hover effects
     this.playButton.on('pointerover', () => {
       this.playButton.setScale(1.1);
-      this.playButton.setTint(0x00ff00);
+      this.playButton.setTint(0xb2d2ad);
     });
 
     this.playButton.on('pointerout', () => {

@@ -16,6 +16,10 @@ export class Level0 extends Scene {
   score: number;
   scoreText: Phaser.GameObjects.Text;
 
+  // Death zone - y coordinate where player dies if they fall below
+  private readonly DEATH_ZONE_Y = 1800;
+  private readonly WORLD_HEIGHT = 2000; // Extended world height to allow falling
+
   // Action platformer controls
   private actionKeys: {
     jump: Phaser.Input.Keyboard.Key;      // Z
@@ -39,14 +43,15 @@ export class Level0 extends Scene {
     this.cameras.main.setBackgroundColor('#000000');
 
     // Create a tiled background that covers the entire level
+    // With world height of 2000, we need multiple rows to cover properly
     for (let x = 0; x < 3200; x += 1536) {
-      for (let y = 0; y < 1200; y += 1024) {
+      for (let y = -1024; y < 2000; y += 1024) {
         this.add.image(x + 768, y + 1000, 'sky');
       }
     }
 
     // Set the world bounds to match our level
-    this.physics.world.setBounds(0, 0, 3200, 1200);
+    this.physics.world.setBounds(0, 0, 3200, this.WORLD_HEIGHT);
 
     this.platforms = this.physics.add.staticGroup();
 
@@ -211,6 +216,11 @@ export class Level0 extends Scene {
     // Update player physics and state
     this.player.update(time, delta);
 
+    // Check if player fell below death zone
+    if (this.player.y > this.DEATH_ZONE_Y) {
+      this.handlePlayerDeath();
+    }
+
     // Update sword position and animation
     this.sword.update();
 
@@ -231,5 +241,53 @@ export class Level0 extends Scene {
     star.disableBody(true, true);
     this.score = this.score + 10;
     this.scoreText.setText('Level 0 - Score: ' + this.score);
+  }
+
+  private handlePlayerDeath() {
+    console.log('Player fell to death zone - restarting level');
+    
+    // Prevent multiple death triggers
+    if (this.scene.isPaused()) return;
+    
+    // Disable player input and physics
+    this.player.setVelocity(0, 0);
+    this.physics.pause();
+    
+    // Create black overlay for fade effect
+    const camera = this.cameras.main;
+    
+    // Use simple rectangle - more reliable than graphics
+    const blackOverlay = this.add.rectangle(
+      camera.width / 2, 
+      camera.height / 2, 
+      camera.width, 
+      camera.height, 
+      0x000000
+    );
+    blackOverlay.setOrigin(0.5, 0.5);
+    blackOverlay.setScrollFactor(0);
+    blackOverlay.setAlpha(0); // Start transparent
+    blackOverlay.setDepth(Number.MAX_SAFE_INTEGER); // Use maximum depth
+    
+    console.log('Created black overlay rectangle:', {
+      width: camera.width,
+      height: camera.height,
+      depth: blackOverlay.depth,
+      alpha: blackOverlay.alpha,
+      x: blackOverlay.x,
+      y: blackOverlay.y
+    });
+    
+    // Animate fade to black
+    this.tweens.add({
+      targets: blackOverlay,
+      alpha: 1,
+      duration: 1000,
+      ease: 'Power2',
+      onComplete: () => {
+        console.log('Fade complete - restarting level');
+        this.scene.restart();
+      }
+    });
   }
 } 

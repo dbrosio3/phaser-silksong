@@ -58,9 +58,9 @@ export class PlatformUtils {
     // Ground platform with 5% padding removed from top
     GROUND: {
       paddingTop: 0.025,
-      paddingBottom: 0,
-      paddingLeft: 0,
-      paddingRight: 0
+      paddingBottom: 0.025,
+      paddingLeft: 0.04,
+      paddingRight: 0.04
     },
     
     // Ground2 platform with 20% padding removed all around
