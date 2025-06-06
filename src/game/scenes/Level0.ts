@@ -154,7 +154,7 @@ export class Level0 extends Scene {
     this.scoreText.setScrollFactor(0); // Make score text stay fixed on screen
 
     // Add debug text for sprite info
-    const debugText = this.add.text(16, 60, 'Sprite: hornet (128x128)', { fontSize: '24px', color: '#000' });
+    const debugText = this.add.text(16, 60, 'Sprite: hornet-px (32x32 → 96x96)', { fontSize: '24px', color: '#000' });
     debugText.setScrollFactor(0);
 
     EventBus.emit('current-scene-ready', this);

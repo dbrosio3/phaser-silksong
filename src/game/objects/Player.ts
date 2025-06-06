@@ -24,6 +24,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // Double jump settings
   private readonly MAX_JUMPS = 2; // Allow double jump
 
+  // Attack overlay sprite
+  private attackOverlay: Phaser.GameObjects.Sprite;
+
   // State tracking
   private lastGroundedTime: number = 0;
   private jumpBufferTime: number = 0;
@@ -53,11 +56,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
+    // Scale up the 32x32 sprite to 96x96 for good visibility
+    this.setScale(3, 3);
+
+    // Create attack overlay sprite
+    this.attackOverlay = scene.add.sprite(x, y, 'hornet-attack');
+    this.attackOverlay.setScale(3, 3); // Match player scale
+    this.attackOverlay.setDepth(2); // Render above player (player is depth 1)
+    this.attackOverlay.setVisible(false); // Initially hidden
+
     // Reduce bounce for less floaty feel
     this.setBounce(0.1);
     this.setCollideWorldBounds(true);
 
-    // Set depth to be in front of the sword
+    // Set depth to be behind the sword
     this.setDepth(1);
 
     // Set drag for better control
@@ -67,55 +79,56 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   }
 
   initAnimations(): void {
-    // Hornet running animation - will be used for both directions
-    this.anims.create({
-      key: 'run',
-      frames: this.anims.generateFrameNumbers('hornet', {
-        start: 1,
-        end: 8
-      }),
-      frameRate: 12,
-      repeat: -1
-    });
-
-    // Hornet idle animation - single frame
+    // Row 1: Idle animation (1 frame)
     this.anims.create({
       key: 'idle',
       frames: [{ key: 'hornet', frame: 0 }],
       frameRate: 1,
     });
 
-    // Hornet jumping animation
+    // Row 2: Running animation (4 frames)
+    this.anims.create({
+      key: 'run',
+      frames: this.anims.generateFrameNumbers('hornet', {
+        start: 4,
+        end: 7
+      }),
+      frameRate: 12,
+      repeat: -1
+    });
+
+    // Row 3: Dash animation (3 frames)
+    this.anims.create({
+      key: 'dash',
+      frames: this.anims.generateFrameNumbers('hornet', {
+        start: 8,
+        end: 10
+      }),
+      frameRate: 12,
+      repeat: -1
+    });
+
+    // Row 4: Jump animation (4 frames)
     this.anims.create({
       key: 'jump',
       frames: this.anims.generateFrameNumbers('hornet', {
-        start: 10,
+        start: 12,
         end: 15
       }),
       frameRate: 8,
       repeat: 1,
     });
 
-    // Hornet dash animation - row 2, columns 4-6
-    this.anims.create({
-      key: 'dash',
-      frames: this.anims.generateFrameNumbers('hornet', {
-        start: 37,
-        end: 38
-      }),
-      frameRate: 12,
-      repeat: -1
-    });
-
-    // Hornet whip attack animation - row 4, columns 0-5
-    this.anims.create({
-      key: 'whip',
-      frames: this.anims.generateFrameNumbers('hornet', {
-        start: 64,
-        end: 69
+    // Attack overlay animations
+    this.scene.anims.create({
+      key: 'attack-overlay',
+      frames: this.scene.anims.generateFrameNumbers('hornet-attack', {
+        start: 0,
+        end: 3  // Adjust based on actual frame count
+        
       }),
       frameRate: 24,
-      repeat: 0 // Play once, don't repeat
+      repeat: 0 // Play once
     });
   }
 
@@ -128,6 +141,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.handleMovement(delta);
     this.handleJumping(time);
     this.updateAnimations();
+    this.updateAttackOverlay();
   }
 
   private updateGroundedState(time: number): void {
@@ -294,11 +308,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private updateAnimations(): void {
     const body = this.body as Phaser.Physics.Arcade.Body;
 
-    if (this.isAttacking) {
-      // Attacking - play whip animation and flip sprite based on facing direction
-      this.anims.play('whip', true);
-      this.setFlipX(this.facingDirection < 0);
-    } else if (this.isDashing) {
+    if (this.isDashing) {
       // Dashing - play dash animation and flip sprite based on facing direction
       this.anims.play('dash', true);
       this.setFlipX(this.facingDirection < 0);
@@ -314,6 +324,38 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       // Idle on ground - play idle animation and flip sprite based on facing direction
       this.anims.play('idle', true);
       this.setFlipX(this.facingDirection < 0);
+    }
+    
+    // Note: Attack animation is handled separately by the attack overlay sprite
+    // This allows the player to show movement animations while attacking
+  }
+
+  private updateAttackOverlay(): void {
+    // Position attack overlay with 10px offset in the facing direction
+    const offsetX = 10 * this.facingDirection; // +10px when facing right, -10px when facing left
+    this.attackOverlay.setPosition(this.x + offsetX, this.y);
+    
+    // Match player's flip state
+    this.attackOverlay.setFlipX(this.flipX);
+    
+    // Show/hide based on attack state
+    if (this.isAttacking) {
+      this.attackOverlay.setVisible(true);
+      
+      // Debug: Check what texture and frame is being used
+      console.log('Attack overlay:', {
+        texture: this.attackOverlay.texture.key,
+        frame: this.attackOverlay.frame.name,
+        visible: this.attackOverlay.visible,
+        animation: this.attackOverlay.anims.currentAnim?.key
+      });
+      
+      // Play attack animation if not already playing
+      if (!this.attackOverlay.anims.isPlaying || this.attackOverlay.anims.currentAnim?.key !== 'attack-overlay') {
+        this.attackOverlay.play('attack-overlay');
+      }
+    } else {
+      this.attackOverlay.setVisible(false);
     }
   }
 

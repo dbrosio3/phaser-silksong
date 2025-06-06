@@ -15,8 +15,11 @@ export class Preloader extends Scene {
     this.load.spritesheet('star', 'star.png', {
         frameWidth: 37, frameHeight: 37
     });
-    this.load.spritesheet('hornet', 'hornet.png', {
-        frameWidth: 128, frameHeight: 128
+    this.load.spritesheet('hornet', 'hornet-px.png', {
+        frameWidth: 32, frameHeight: 32
+    });
+    this.load.spritesheet('hornet-attack', 'hornet_attack.png', {
+        frameWidth: 40, frameHeight: 32  // Correct dimensions: 40px wide x 32px high
     });
   }
 
