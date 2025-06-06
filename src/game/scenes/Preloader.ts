@@ -10,8 +10,10 @@ export class Preloader extends Scene {
     this.load.setPath('assets');
 
     this.load.image('sky', 'sky.png');
+    this.load.image('px_bg', 'px_bg.png');
     this.load.image('ground', 'ground.png');
     this.load.image('ground2', 'ground_2.png');
+    this.load.image('grassy_floor', 'grassy_floor.png');
     this.load.spritesheet('star', 'star.png', {
         frameWidth: 37, frameHeight: 37
     });

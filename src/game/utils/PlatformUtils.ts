@@ -71,6 +71,14 @@ export class PlatformUtils {
       paddingRight: 0.2
     },
 
+    // Grassy floor - surface at 30% from top (resolution 538 × 107)
+    GRASSY_FLOOR: {
+      paddingTop: 0.3,     // Surface is at 30% from top, so remove top 30%
+      paddingBottom: 0.05, // Small bottom padding for visual accuracy
+      paddingLeft: 0.02,   // Minimal side padding
+      paddingRight: 0.02
+    },
+
     // No padding (default platform)
     DEFAULT: {
       paddingTop: 0,

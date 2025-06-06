@@ -46,7 +46,7 @@ export class Level0 extends Scene {
     // With world height of 2000, we need multiple rows to cover properly
     for (let x = 0; x < 3200; x += 1536) {
       for (let y = -1024; y < 2000; y += 1024) {
-        this.add.image(x + 768, y + 1000, 'sky');
+        this.add.image(x + 768, y + 400, 'px_bg');
       }
     }
 
@@ -55,14 +55,23 @@ export class Level0 extends Scene {
 
     this.platforms = this.physics.add.staticGroup();
 
-    // Ground floor - using new 1024×451 sprite
-    // Since new sprite is ~2.5x wider and ~14x taller than original, adjust scale accordingly
-    // Ground level platforms with 5% padding removed from top using preset
-    PlatformUtils.createPlatformWithPreset(this, this.platforms, 400, 1330, 'ground', 'GROUND', 1, 1); // Left section
-    PlatformUtils.createPlatformWithPreset(this, this.platforms, 2700, 1330, 'ground', 'GROUND', -1, 1); // Right section
+    // Ground floor - tiled grassy floor sprites (538 × 107 each)
+    // Surface is at 30% from top, so GRASSY_FLOOR preset handles collision properly
+    
+    // Left ground section - multiple tiles
+    for (let i = 0; i < 3; i++) {
+      PlatformUtils.createPlatformWithPreset(this, this.platforms, 200 + (i * 538), 1330, 'grassy_floor', 'GRASSY_FLOOR', 1, 1);
+    }
+    
+    // Right ground section - multiple tiles  
+    for (let i = 0; i < 3; i++) {
+      PlatformUtils.createPlatformWithPreset(this, this.platforms, 2200 + (i * 538), 1330, 'grassy_floor', 'GRASSY_FLOOR', 1, 1);
+    }
 
-    // Simple scattered platforms using ground2 sprite with 20% padding removed all around using preset
-    PlatformUtils.createPlatformWithPreset(this, this.platforms, 1500, 1000, 'ground2', 'GROUND_2', 0.1, 1); // Low platform
+    // Middle platform - 2 tiles for medium size
+    for (let i = 0; i < 2; i++) {
+      PlatformUtils.createPlatformWithPreset(this, this.platforms, 1230 + (i * 538), 1000, 'grassy_floor', 'GRASSY_FLOOR', 1, 1);
+    }
     
     this.player = new Player(this, 100, 1050);
     this.physics.add.collider(this.player, this.platforms);
