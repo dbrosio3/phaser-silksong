@@ -342,14 +342,6 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.isAttacking) {
       this.attackOverlay.setVisible(true);
       
-      // Debug: Check what texture and frame is being used
-      console.log('Attack overlay:', {
-        texture: this.attackOverlay.texture.key,
-        frame: this.attackOverlay.frame.name,
-        visible: this.attackOverlay.visible,
-        animation: this.attackOverlay.anims.currentAnim?.key
-      });
-      
       // Play attack animation if not already playing
       if (!this.attackOverlay.anims.isPlaying || this.attackOverlay.anims.currentAnim?.key !== 'attack-overlay') {
         this.attackOverlay.play('attack-overlay');

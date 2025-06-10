@@ -1,24 +1,18 @@
-import { GameObjects, Scene } from 'phaser';
+import { Scene } from 'phaser';
 import Phaser from 'phaser';
 
 import { EventBus } from '../EventBus';
 import { Player } from '../objects/Player';
 import { Sword } from '../objects/Sword';
-import { PlatformUtils } from '../utils/PlatformUtils';
 
 export class Level0 extends Scene {
-  background: GameObjects.Image;
-  platforms: Phaser.Physics.Arcade.StaticGroup;
+  // Core game objects
+  private map: Phaser.Tilemaps.Tilemap;
+  private tileset: Phaser.Tilemaps.Tileset;
+  private sceneLayer: Phaser.Tilemaps.TilemapLayer;
   player: Player;
   sword: Sword;
   cursors: Phaser.Types.Input.Keyboard.CursorKeys;
-  stars: Phaser.Physics.Arcade.Group;
-  score: number;
-  scoreText: Phaser.GameObjects.Text;
-
-  // Death zone - y coordinate where player dies if they fall below
-  private readonly DEATH_ZONE_Y = 1800;
-  private readonly WORLD_HEIGHT = 2000; // Extended world height to allow falling
 
   // Action platformer controls
   private actionKeys: {
@@ -39,49 +33,117 @@ export class Level0 extends Scene {
   }
 
   create() {
-    // Set black background color
-    this.cameras.main.setBackgroundColor('#000000');
-
-    // Create a tiled background that covers the entire level
-    // With world height of 2000, we need multiple rows to cover properly
-    for (let x = 0; x < 3200; x += 1536) {
-      for (let y = -1024; y < 2000; y += 1024) {
-        this.add.image(x + 768, y + 400, 'px_bg');
+    // Add a simple tiled background using the same bg image from Tiled
+    const mapWidthPx = 100 * 32; // Map is 100 tiles wide, each 32px
+    const mapHeightPx = 20 * 32; // Map is 20 tiles high, each 32px
+    
+    // Tile the background to cover the entire map (bg.png is 1024x1024)
+    for (let x = 0; x < mapWidthPx; x += 1024) {
+      for (let y = 0; y < mapHeightPx; y += 1024) {
+        this.add.image(x + 512, y + 512, 'bg');
       }
     }
 
-    // Set the world bounds to match our level
-    this.physics.world.setBounds(0, 0, 3200, this.WORLD_HEIGHT);
-
-    this.platforms = this.physics.add.staticGroup();
-
-    // Ground floor - tiled grassy floor sprites (538 × 107 each)
-    // Surface is at 30% from top, so GRASSY_FLOOR preset handles collision properly
+    // Load the tilemap
+    this.map = this.make.tilemap({ key: 'level0-map' });
     
-    // Left ground section - multiple tiles
-    for (let i = 0; i < 3; i++) {
-      PlatformUtils.createPlatformWithPreset(this, this.platforms, 200 + (i * 538), 1330, 'grassy_floor', 'GRASSY_FLOOR', 1, 1);
+    // Add the tileset to the map
+    const tileset = this.map.addTilesetImage('grass-spritesheet', 'grass-spritesheet');
+    if (!tileset) {
+      throw new Error('Failed to load grass-spritesheet tileset');
+    }
+    this.tileset = tileset;
+    
+    // Create the scene layer (this contains the solid platforms)
+    const sceneLayer = this.map.createLayer('scene', this.tileset, 0, 0);
+    if (!sceneLayer) {
+      throw new Error('Failed to create scene layer');
+    }
+    this.sceneLayer = sceneLayer;
+    
+    // Set collision for all tiles in the scene layer (tiles with ID > 0)
+    // Try multiple collision setup methods
+    this.sceneLayer.setCollisionByExclusion([0]);
+    
+    // Also try setting collision manually for specific tiles
+    this.sceneLayer.setCollisionBetween(1, 26);
+    
+    // Manual collision setup for tiles that definitely exist
+    for (let x = 0; x < this.map.width; x++) {
+      for (let y = 18; y < 20; y++) { // Rows 18 and 19 have our platforms
+        const tile = this.map.getTileAt(x, y, false, 'scene');
+        if (tile && tile.index > 0) {
+          tile.setCollision(true, true, true, true);
+        }
+      }
     }
     
-    // Right ground section - multiple tiles  
-    for (let i = 0; i < 3; i++) {
-      PlatformUtils.createPlatformWithPreset(this, this.platforms, 2200 + (i * 538), 1330, 'grassy_floor', 'GRASSY_FLOOR', 1, 1);
-    }
-
-    // Middle platform - 2 tiles for medium size
-    for (let i = 0; i < 2; i++) {
-      PlatformUtils.createPlatformWithPreset(this, this.platforms, 1230 + (i * 538), 1000, 'grassy_floor', 'GRASSY_FLOOR', 1, 1);
+    // Debug: Check collision after setting it
+    console.log('Collision set for tiles. Checking tile at ground:');
+    const testTile = this.map.getTileAt(3, 18, false, 'scene');
+    if (testTile) {
+      console.log('Test tile collision properties:');
+      console.log('- collides:', testTile.collides);
+      console.log('- collideUp:', testTile.collideUp);
+      console.log('- collideDown:', testTile.collideDown);
+      console.log('- collideLeft:', testTile.collideLeft);
+      console.log('- collideRight:', testTile.collideRight);
+      console.log('- index:', testTile.index);
     }
     
-    this.player = new Player(this, 100, 1050);
-    this.physics.add.collider(this.player, this.platforms);
+    // Debug: Log collision setup
+    console.log('Tilemap loaded:', this.map);
+    console.log('Scene layer created:', this.sceneLayer);
+    console.log('Map dimensions:', this.map.widthInPixels, 'x', this.map.heightInPixels);
+    
+    // Set the world bounds to match the tilemap
+    const mapWidth = this.map.widthInPixels;
+    const mapHeight = this.map.heightInPixels;
+    this.physics.world.setBounds(0, 0, mapWidth, mapHeight);
+
+    // Create player at a good starting position
+    // Starting near the left side, above the ground level (row 18 * 32 = 576px)
+    this.player = new Player(this, 100, 500);
+    
+    // Set up collision between player and the tilemap layer
+    // Try both collider and overlap to see what works
+    console.log('Setting up player collision...');
+    const collider = this.physics.add.collider(this.player, this.sceneLayer);
+    console.log('Collider created:', collider);
+    
+    // Alternative: Try using world collision bounds for testing
+    console.log('Player physics body:', this.player.body);
+    
+    // Debug: Check if collision is working
+    console.log('Player created at:', this.player.x, this.player.y);
+    console.log('Collision set up between player and scene layer');
+    
+    // Debug: Check what tiles are at specific positions
+    const playerTileX = Math.floor(this.player.x / 32);
+    const playerTileY = Math.floor(this.player.y / 32);
+    const groundTileY = 18; // Ground should be at row 18
+    
+    console.log('Player tile position:', playerTileX, playerTileY);
+    console.log('Ground should be at row:', groundTileY);
+    
+    // Check what tile is at the ground position
+    const groundTile = this.map.getTileAt(playerTileX, groundTileY, false, 'scene');
+    console.log('Tile at ground position:', groundTile);
+    
+    // Debug: Check if the scene layer has collision set
+    console.log('Scene layer collision info:', {
+      layer: this.sceneLayer,
+      tilemap: this.sceneLayer.tilemap,
+      layerIndex: this.sceneLayer.layerIndex
+    });
 
     // Create sword attached to player
     this.sword = new Sword(this, this.player);
 
-    // Setup smooth camera follow with lookahead
+    // Setup camera to follow the player
     this.setupCamera();
 
+    // Setup input controls
     if (this.input.keyboard) {
       this.cursors = this.input.keyboard.createCursorKeys();
       this.actionKeys = {
@@ -92,107 +154,29 @@ export class Level0 extends Scene {
       };
     }
 
-    // Create star idle animation
-    console.log('Creating star animation...');
-    console.log('Star texture exists:', this.textures.exists('star'));
-    
-    // Debug: Check how many frames the texture has
-    const starTexture = this.textures.get('star');
-    console.log('Star texture info:', starTexture);
-    console.log('Star frame count:', starTexture.frameTotal);
-    
-    try {
-      this.anims.create({
-        key: 'star-idle',
-        frames: [
-          { key: 'star', frame: 0 },
-          { key: 'star', frame: 1 },
-          { key: 'star', frame: 2 }
-        ],
-        frameRate: 8,
-        repeat: -1
-      });
-      console.log('Star animation created successfully');
-    } catch (error) {
-      console.error('Error creating star animation:', error);
-    }
-
-    // Stars positioned on the new platform layout
-    this.stars = this.physics.add.group();
-
-    // Adjusted star positions for the new map layout
-    const starPositions = [
-      // Ground level stars
-      { x: 200, y: 1100 }, { x: 400, y: 1100 }, { x: 600, y: 1100 },
-      { x: 2200, y: 1100 }, { x: 2400, y: 1100 }, { x: 2600, y: 1100 },
-      // Step platforms
-      { x: 1150, y: 900 }, { x: 1250, y: 900 },
-      { x: 1750, y: 700 }, { x: 1850, y: 700 },
-      { x: 2350, y: 500 }, { x: 2450, y: 500 },
-      // Side platforms
-      { x: 1000, y: 600 }, { x: 2600, y: 300 }
-    ];
-
-    starPositions.forEach(pos => {
-      const star = this.stars.create(pos.x, pos.y, 'star');
-      star.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
-      try {
-        // Add staggered animation timing
-        const randomDelay = Phaser.Math.Between(0, 2000); // Random delay 0-2 seconds
-        const randomStartFrame = Phaser.Math.Between(0, 2); // Random starting frame
-        
-        // Set initial frame
-        star.setFrame(randomStartFrame);
-        
-        // Start animation with delay
-        this.time.delayedCall(randomDelay, () => {
-          star.play('star-idle');
-        });
-        
-        console.log('Star animation started at', pos.x, pos.y, 'with delay', randomDelay);
-      } catch (error) {
-        console.error('Error playing star animation:', error);
-      }
-    });
-
-    this.physics.add.collider(this.stars, this.platforms);
-    this.physics.add.overlap(this.player, this.stars, this.collectStar, undefined, this);
-
-    this.score = 0;
-    this.scoreText = this.add.text(16, 16, 'Level 0 - Score: 0', { fontSize: '32px', color: '#000' });
-    this.scoreText.setScrollFactor(0); // Make score text stay fixed on screen
-
-    // Add debug text for sprite info
-    const debugText = this.add.text(16, 60, 'Sprite: hornet-px (32x32 → 96x96)', { fontSize: '24px', color: '#000' });
-    debugText.setScrollFactor(0);
-
     EventBus.emit('current-scene-ready', this);
   }
 
   private setupCamera(): void {
     const camera = this.cameras.main;
 
-    // Remove camera bounds - let camera follow everywhere for consistent centering
-    // camera.setBounds(0, 0, 3200, 1200); // Commented out
+    // Set camera bounds to the tilemap dimensions
+    const mapWidth = this.map.widthInPixels;
+    const mapHeight = this.map.heightInPixels;
+    camera.setBounds(0, 0, mapWidth, mapHeight);
 
-    // Very tight following - player stays perfectly centered
+    // Follow the player smoothly
     camera.startFollow(this.player, true, 0.2, 0.2);
 
-    // Remove deadzone - camera follows every movement
-    camera.setDeadzone(0, 0);
+    // Set a small deadzone for smoother following
+    camera.setDeadzone(100, 50);
 
-    // No offset - keep player perfectly centered
-    camera.setFollowOffset(0, 0);
-
-    // Set zoom if needed (1 = normal, >1 = zoomed in, <1 = zoomed out)
-    camera.setZoom(1);
-
-    // Enable camera smoothing to reduce jitter
-    camera.roundPixels = true; // Prevents sub-pixel rendering artifacts
+    // Enable pixel-perfect rendering
+    camera.roundPixels = true;
   }
 
   update(time: number, delta: number) {
-    // Handle input with new action platformer controls
+    // Handle input with action platformer controls
     const leftPressed = this.cursors.left.isDown;
     const rightPressed = this.cursors.right.isDown;
     const upPressed = this.cursors.up.isDown;
@@ -225,11 +209,6 @@ export class Level0 extends Scene {
     // Update player physics and state
     this.player.update(time, delta);
 
-    // Check if player fell below death zone
-    if (this.player.y > this.DEATH_ZONE_Y) {
-      this.handlePlayerDeath();
-    }
-
     // Update sword position and animation
     this.sword.update();
 
@@ -238,65 +217,5 @@ export class Level0 extends Scene {
     this.wasAttackDown = attackPressed;
     this.wasFocusDown = focusPressed;
     this.wasDashDown = dashPressed;
-
-    // Check if all stars collected - transition to Level1
-    if (this.stars.countActive() === 0) {
-      this.scene.start('Level1');
-    }
-  }
-
-  collectStar(object1: any, object2: any) {
-    const star = object2 as Phaser.Physics.Arcade.Sprite;
-    star.disableBody(true, true);
-    this.score = this.score + 10;
-    this.scoreText.setText('Level 0 - Score: ' + this.score);
-  }
-
-  private handlePlayerDeath() {
-    console.log('Player fell to death zone - restarting level');
-    
-    // Prevent multiple death triggers
-    if (this.scene.isPaused()) return;
-    
-    // Disable player input and physics
-    this.player.setVelocity(0, 0);
-    this.physics.pause();
-    
-    // Create black overlay for fade effect
-    const camera = this.cameras.main;
-    
-    // Use simple rectangle - more reliable than graphics
-    const blackOverlay = this.add.rectangle(
-      camera.width / 2, 
-      camera.height / 2, 
-      camera.width, 
-      camera.height, 
-      0x000000
-    );
-    blackOverlay.setOrigin(0.5, 0.5);
-    blackOverlay.setScrollFactor(0);
-    blackOverlay.setAlpha(0); // Start transparent
-    blackOverlay.setDepth(Number.MAX_SAFE_INTEGER); // Use maximum depth
-    
-    console.log('Created black overlay rectangle:', {
-      width: camera.width,
-      height: camera.height,
-      depth: blackOverlay.depth,
-      alpha: blackOverlay.alpha,
-      x: blackOverlay.x,
-      y: blackOverlay.y
-    });
-    
-    // Animate fade to black
-    this.tweens.add({
-      targets: blackOverlay,
-      alpha: 1,
-      duration: 1000,
-      ease: 'Power2',
-      onComplete: () => {
-        console.log('Fade complete - restarting level');
-        this.scene.restart();
-      }
-    });
   }
 } 
