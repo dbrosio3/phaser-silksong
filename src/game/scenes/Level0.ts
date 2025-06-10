@@ -47,36 +47,52 @@ export class Level0 extends Scene {
     // Load the tilemap
     this.map = this.make.tilemap({ key: 'level0-map' });
     
-    // Add the tileset to the map
+    // Add the tileset to the map (first param is name in JSON, second is the loaded texture key)
     const tileset = this.map.addTilesetImage('grass-spritesheet', 'grass-spritesheet');
     if (!tileset) {
       throw new Error('Failed to load grass-spritesheet tileset');
     }
     this.tileset = tileset;
     
+    console.log('Tileset loaded successfully:', {
+      name: tileset.name,
+      firstgid: tileset.firstgid,
+      total: tileset.total,
+      image: tileset.image?.key
+    });
+    
     // Create the scene layer (this contains the solid platforms)
+    // Try creating with explicit parameters
     const sceneLayer = this.map.createLayer('scene', this.tileset, 0, 0);
     if (!sceneLayer) {
       throw new Error('Failed to create scene layer');
     }
     this.sceneLayer = sceneLayer;
     
-    // Set collision for all tiles in the scene layer (tiles with ID > 0)
-    // Try multiple collision setup methods
-    this.sceneLayer.setCollisionByExclusion([0]);
+    // Make sure the layer is visible and active
+    this.sceneLayer.setVisible(true);
+    this.sceneLayer.setActive(true);
     
-    // Also try setting collision manually for specific tiles
+    console.log('Scene layer created:', {
+      name: this.sceneLayer.layer?.name,
+      visible: this.sceneLayer.visible,
+      tilesTotal: this.sceneLayer.layer?.data?.length,
+      layerData: this.sceneLayer.layer
+    });
+    
+    // Set collision for specific tile ranges that we know exist (1-26)
     this.sceneLayer.setCollisionBetween(1, 26);
     
-    // Manual collision setup for tiles that definitely exist
-    for (let x = 0; x < this.map.width; x++) {
-      for (let y = 18; y < 20; y++) { // Rows 18 and 19 have our platforms
-        const tile = this.map.getTileAt(x, y, false, 'scene');
-        if (tile && tile.index > 0) {
-          tile.setCollision(true, true, true, true);
-        }
-      }
+    // Also try setting tile callbacks as an alternative
+    for (let i = 1; i <= 26; i++) {
+      this.sceneLayer.setTileIndexCallback(i, () => {
+        console.log('Tile callback fired for index:', i);
+      }, this);
     }
+    
+    console.log('Set collision for tiles 1-26');
+    
+    console.log('Collision set for all non-zero tiles in scene layer');
     
     // Debug: Check collision after setting it
     console.log('Collision set for tiles. Checking tile at ground:');
@@ -100,16 +116,28 @@ export class Level0 extends Scene {
     const mapWidth = this.map.widthInPixels;
     const mapHeight = this.map.heightInPixels;
     this.physics.world.setBounds(0, 0, mapWidth, mapHeight);
+    
+    console.log('World bounds set to:', {
+      width: mapWidth,
+      height: mapHeight,
+      bottomY: mapHeight
+    });
 
     // Create player at a good starting position
     // Starting near the left side, above the ground level (row 18 * 32 = 576px)
     this.player = new Player(this, 100, 500);
     
     // Set up collision between player and the tilemap layer
-    // Try both collider and overlap to see what works
     console.log('Setting up player collision...');
+    
+    // Create collider without any callbacks first
     const collider = this.physics.add.collider(this.player, this.sceneLayer);
     console.log('Collider created:', collider);
+    
+    // Add overlap detector to see if there are any interactions at all
+    this.physics.add.overlap(this.player, this.sceneLayer, () => {
+      console.log('OVERLAP DETECTED! Player is touching tiles');
+    });
     
     // Alternative: Try using world collision bounds for testing
     console.log('Player physics body:', this.player.body);
@@ -130,11 +158,59 @@ export class Level0 extends Scene {
     const groundTile = this.map.getTileAt(playerTileX, groundTileY, false, 'scene');
     console.log('Tile at ground position:', groundTile);
     
+    // Debug: Check several tiles around the ground area
+    console.log('Checking tiles in ground area:');
+    for (let x = 0; x < 10; x++) {
+      for (let y = 17; y < 20; y++) {
+        const tile = this.map.getTileAt(x, y, false, 'scene');
+        if (tile && tile.index > 0) {
+          console.log(`Tile at (${x}, ${y}):`, {
+            index: tile.index,
+            pixelX: tile.pixelX,
+            pixelY: tile.pixelY,
+            collides: tile.collides,
+            layer: tile.layer?.name,
+            faceTop: tile.faceTop,
+            faceBottom: tile.faceBottom,
+            faceLeft: tile.faceLeft,
+            faceRight: tile.faceRight
+          });
+        }
+      }
+    }
+    
     // Debug: Check if the scene layer has collision set
     console.log('Scene layer collision info:', {
       layer: this.sceneLayer,
       tilemap: this.sceneLayer.tilemap,
       layerIndex: this.sceneLayer.layerIndex
+    });
+
+    // Debug: Check player physics body details
+    const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
+    console.log('Player physics body details:', {
+      playerCenter: { x: this.player.x, y: this.player.y },
+      bodyBounds: {
+        x: playerBody?.x,
+        y: playerBody?.y,
+        width: playerBody?.width,
+        height: playerBody?.height,
+        bottom: playerBody ? playerBody.y + playerBody.height : 'N/A'
+      },
+      velocity: {
+        x: playerBody?.velocity.x,
+        y: playerBody?.velocity.y
+      },
+      tileAtFeet: `Row ${Math.floor((this.player.y + 16) / 32)} (Y=${Math.floor((this.player.y + 16) / 32) * 32})`
+    });
+
+    // Debug: Check tileset loading
+    console.log('Tileset info:', {
+      name: this.tileset.name,
+      image: this.tileset.image,
+      firstgid: this.tileset.firstgid,
+      columns: this.tileset.columns,
+      total: this.tileset.total
     });
 
     // Create sword attached to player

@@ -59,6 +59,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Scale up the 32x32 sprite to 96x96 for good visibility
     this.setScale(3, 3);
 
+    // Manually set the physics body size to account for scaling
+    // Original sprite is 32x32, scaled to 96x96
+    // Let's use a reasonable collision box size and make sure it's properly centered
+    (this.body as Phaser.Physics.Arcade.Body).setSize(32, 32, true); // Use original size, centered
+
     // Create attack overlay sprite
     this.attackOverlay = scene.add.sprite(x, y, 'hornet-attack');
     this.attackOverlay.setScale(3, 3); // Match player scale
@@ -67,6 +72,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Reduce bounce for less floaty feel
     this.setBounce(0.1);
+    // Re-enable world bounds collision
     this.setCollideWorldBounds(true);
 
     // Set depth to be behind the sword
@@ -146,7 +152,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   private updateGroundedState(time: number): void {
     const wasGrounded = this.isGrounded;
-    this.isGrounded = this.body && (this.body as Phaser.Physics.Arcade.Body).blocked.down || false;
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    this.isGrounded = this.body && body.blocked.down || false;
+
+    // Debug log when state changes
+    if (this.isGrounded && !wasGrounded) {
+      console.log('Player LANDED! Y position:', this.y, 'Body bottom:', body.y + body.height);
+    } else if (!this.isGrounded && wasGrounded) {
+      console.log('Player started FALLING! Y position:', this.y);
+    }
 
     if (this.isGrounded) {
       this.lastGroundedTime = time;
