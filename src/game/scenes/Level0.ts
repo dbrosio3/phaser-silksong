@@ -37,10 +37,18 @@ export class Level0 extends Scene {
     const mapWidthPx = 100 * 32; // Map is 100 tiles wide, each 32px
     const mapHeightPx = 20 * 32; // Map is 20 tiles high, each 32px
     
-    // Tile the background to cover the entire map (bg.png is 1024x1024)
-    for (let x = 0; x < mapWidthPx; x += 1024) {
-      for (let y = 0; y < mapHeightPx; y += 1024) {
-        this.add.image(x + 512, y + 512, 'bg');
+    // Get the actual bg texture dimensions
+    const bgTexture = this.textures.get('bg');
+    const bgWidth = bgTexture.source[0].width;
+    const bgHeight = bgTexture.source[0].height;
+    
+    console.log('Background texture dimensions:', bgWidth, 'x', bgHeight);
+    
+    // Tile the background to cover the entire map with no offset (like Tiled does)
+    for (let x = 0; x < mapWidthPx; x += bgWidth) {
+      for (let y = 0; y < mapHeightPx; y += bgHeight) {
+        const bgImage = this.add.image(x, y, 'bg');
+        bgImage.setOrigin(0, 0); // Position by top-left corner instead of center
       }
     }
 
@@ -244,11 +252,16 @@ export class Level0 extends Scene {
     // Follow the player smoothly
     camera.startFollow(this.player, true, 0.2, 0.2);
 
-    // Set a small deadzone for smoother following
-    camera.setDeadzone(100, 50);
+    // Set a small deadzone for smoother following (adjusted for zoom)
+    camera.setDeadzone(50, 25);
+
+    // Set zoom to 2.5x for good balance between visibility and detail
+    camera.setZoom(2.5);
 
     // Enable pixel-perfect rendering
     camera.roundPixels = true;
+    
+    console.log('Camera setup with 3x zoom to compensate for native sprite sizes');
   }
 
   update(time: number, delta: number) {

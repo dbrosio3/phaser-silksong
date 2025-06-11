@@ -21,7 +21,7 @@ const config: Phaser.Types.Core.GameConfig = {
   physics: {
     default: 'arcade',
     arcade: {
-      gravity: { y: 2000, x: 0 },
+      gravity: { y: 1400, x: 0 }, // Reduced gravity for higher jumps and better platforming feel
       debug: true
     }
   },

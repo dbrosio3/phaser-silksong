@@ -1,18 +1,18 @@
 import Phaser from 'phaser';
 
 export class Player extends Phaser.Physics.Arcade.Sprite {
-  // Movement constants
-  private readonly MOVE_SPEED = 500;
-  private readonly JUMP_VELOCITY = -1000; // More negative = jumps higher/faster
-  private readonly ACCELERATION = 3000; // Higher = reaches max speed faster
-  private readonly AIR_ACCELERATION = 800; // Higher = more air control
-  private readonly FRICTION = 3000; // Higher = stops sliding sooner
-  private readonly AIR_FRICTION = 800; // Higher = less air sliding
+  // Movement constants (adjusted for 3x camera zoom - divided by 3 to maintain same visual speed)
+  private readonly MOVE_SPEED = 220; // Increased for faster movement
+  private readonly JUMP_VELOCITY = -600; // Much higher jumps for better platforming
+  private readonly ACCELERATION = 1000; // Was 3000, now 3000/3
+  private readonly AIR_ACCELERATION = 267; // Was 800, now 800/3
+  private readonly FRICTION = 1000; // Was 3000, now 3000/3
+  private readonly AIR_FRICTION = 267; // Was 800, now 800/3
 
-  // Dash constants
-  private readonly DASH_SPEED = 2000; // Dash speed
-  private readonly DASH_DURATION = 200; // ms
-  private readonly DASH_COOLDOWN = 500; // ms between dashes
+  // Dash constants (adjusted for 3x camera zoom)
+  private readonly DASH_SPEED = 667; // Was 2000, now 2000/3
+  private readonly DASH_DURATION = 200; // ms (unchanged - time-based)
+  private readonly DASH_COOLDOWN = 500; // ms between dashes (unchanged - time-based)
 
   // Attack constants
   private readonly WHIP_DURATION = 300; // ms (roughly 6 frames at 28fps)
@@ -56,17 +56,15 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    // Scale up the 32x32 sprite to 96x96 for good visibility
-    this.setScale(3, 3);
+    // Keep the sprite at its native 32x32 size - no scaling
+    // The camera zoom will handle visibility instead
+    
+    // Set physics body size to match the sprite exactly
+    (this.body as Phaser.Physics.Arcade.Body).setSize(32, 32, true);
 
-    // Manually set the physics body size to account for scaling
-    // Original sprite is 32x32, scaled to 96x96
-    // Let's use a reasonable collision box size and make sure it's properly centered
-    (this.body as Phaser.Physics.Arcade.Body).setSize(32, 32, true); // Use original size, centered
-
-    // Create attack overlay sprite
+    // Create attack overlay sprite at native size too
     this.attackOverlay = scene.add.sprite(x, y, 'hornet-attack');
-    this.attackOverlay.setScale(3, 3); // Match player scale
+    // No scaling for attack overlay either
     this.attackOverlay.setDepth(2); // Render above player (player is depth 1)
     this.attackOverlay.setVisible(false); // Initially hidden
 
