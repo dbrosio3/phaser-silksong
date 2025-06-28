@@ -90,6 +90,7 @@ export class Level0 extends Scene {
     
     // Set collision for specific tile ranges that we know exist (1-26)
     this.sceneLayer.setCollisionBetween(1, 26);
+    // this.sceneLayer.setCollisionByProperty({ collides: true });
     
     // Also try setting tile callbacks as an alternative
     for (let i = 1; i <= 26; i++) {

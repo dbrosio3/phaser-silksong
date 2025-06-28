@@ -22,7 +22,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly JUMP_BUFFER_TIME = 100; // ms before landing where jump input is remembered
 
   // Double jump settings
-  private readonly MAX_JUMPS = 2; // Allow double jump
+  private readonly MAX_JUMPS = 1; // Disabled double jump temporarily to test wall jump
+
+  // Wall jump constants
+  private readonly WALL_JUMP_VELOCITY_Y = -550; // Vertical velocity for wall jump (slightly more powerful without double jump)
+  private readonly WALL_JUMP_VELOCITY_X = 350; // Horizontal velocity for wall jump (increased for better mobility)
+  private readonly WALL_JUMP_GRACE_TIME = 120; // ms after leaving wall where wall jump is still allowed (slightly more forgiving)
+  private readonly WALL_SLIDE_FRICTION = 100; // Reduced gravity when sliding on wall (more noticeable slide effect)
 
   // Attack overlay sprite
   private attackOverlay: Phaser.GameObjects.Sprite;
@@ -33,6 +39,12 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private isGrounded: boolean = false;
   private jumpsRemaining: number = this.MAX_JUMPS;
   private hasJumped: boolean = false; // Track if player has actually jumped
+
+  // Wall touch state tracking
+  private isTouchingWallLeft: boolean = false;
+  private isTouchingWallRight: boolean = false;
+  private lastWallTouchTime: number = 0;
+  private lastWallDirection: number = 0; // -1 for left wall, 1 for right wall, 0 for no wall
 
   // Direction and dash state
   private facingDirection: number = 1; // 1 for right, -1 for left (always has a direction)
@@ -59,8 +71,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Keep the sprite at its native 32x32 size - no scaling
     // The camera zoom will handle visibility instead
     
-    // Set physics body size to match the sprite exactly
-    (this.body as Phaser.Physics.Arcade.Body).setSize(32, 32, true);
+    // Set physics body size compensating for sprite padding (25% each side = 50% total width)
+    // Reduce width to 16px (50% of 32px) and center it
+    const bodyWidth = 16; // 50% of sprite width to account for horizontal padding
+    const bodyHeight = 32; // Keep full height
+    (this.body as Phaser.Physics.Arcade.Body).setSize(bodyWidth, bodyHeight, true);
 
     // Create attack overlay sprite at native size too
     this.attackOverlay = scene.add.sprite(x, y, 'hornet-attack');
@@ -140,6 +155,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // Call this from the scene's update method
   update(time: number, delta: number): void {
     this.updateGroundedState(time);
+    this.updateWallTouchState(time);
     this.handleDashing(time);
     this.handleAttacking(time);
     this.handleMovement(delta);
@@ -172,6 +188,48 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     } else {
       // Reduce drag in air for better air control
       this.setDragX(this.AIR_FRICTION);
+    }
+  }
+
+  private updateWallTouchState(time: number): void {
+    const body = this.body as Phaser.Physics.Arcade.Body;
+    const wasTouchingWallLeft = this.isTouchingWallLeft;
+    const wasTouchingWallRight = this.isTouchingWallRight;
+    
+    this.isTouchingWallLeft = this.body && body.blocked.left || false;
+    this.isTouchingWallRight = this.body && body.blocked.right || false;
+
+    // Update wall touch time and direction
+    if (this.isTouchingWallLeft && !wasTouchingWallLeft) {
+      this.lastWallTouchTime = time;
+      this.lastWallDirection = -1; // Left wall
+      console.log('Player touching LEFT wall');
+    } else if (this.isTouchingWallRight && !wasTouchingWallRight) {
+      this.lastWallTouchTime = time;
+      this.lastWallDirection = 1; // Right wall
+      console.log('Player touching RIGHT wall');
+    }
+
+    // Keep track of the most recent wall touch
+    if (this.isTouchingWallLeft || this.isTouchingWallRight) {
+      this.lastWallTouchTime = time;
+      this.lastWallDirection = this.isTouchingWallLeft ? -1 : 1;
+    }
+
+    // Apply wall slide friction when touching wall and falling
+    if ((this.isTouchingWallLeft || this.isTouchingWallRight) && !this.isGrounded && body.velocity.y > 0) {
+      // Reduce falling speed when sliding on wall
+      const currentGravity = body.gravity.y || 0;
+      const worldGravity = this.scene.physics.world.gravity.y || 0;
+      const totalGravity = currentGravity + worldGravity;
+      
+      if (totalGravity > 0) {
+        // Apply upward force to counteract some gravity
+        body.setAccelerationY(-this.WALL_SLIDE_FRICTION);
+      }
+    } else {
+      // Reset acceleration when not wall sliding
+      body.setAccelerationY(0);
     }
   }
 
@@ -292,6 +350,20 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     const canCoyoteJump = time - this.lastGroundedTime <= this.COYOTE_TIME;
     const hasJumpBuffer = time - this.jumpBufferTime <= this.JUMP_BUFFER_TIME;
 
+    // Wall jump conditions
+    const canWallJumpGrace = time - this.lastWallTouchTime <= this.WALL_JUMP_GRACE_TIME;
+    const canWallJump = !this.isGrounded && !this.isDashing && 
+                       (this.isTouchingWallLeft || this.isTouchingWallRight || canWallJumpGrace) &&
+                       this.lastWallDirection !== 0;
+
+    // Priority: Wall jump > Normal jump > Double jump
+    if (hasJumpBuffer && canWallJump) {
+      this.performWallJump();
+      // Clear jump buffer after successful wall jump
+      this.jumpBufferTime = 0;
+      return;
+    }
+
     // Can jump if:
     // 1. Grounded or within coyote time (first jump)
     // 2. In air but has jumped before and has jumps remaining (double jump)
@@ -315,6 +387,28 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.jumpsRemaining === this.MAX_JUMPS - 1) {
       this.lastGroundedTime = 0;
     }
+  }
+
+  private performWallJump(): void {
+    // Wall jump always goes in the opposite direction of the wall
+    const wallJumpDirection = -this.lastWallDirection; // Opposite to wall direction
+    
+    // Set velocities for diagonal wall jump
+    this.setVelocityY(this.WALL_JUMP_VELOCITY_Y);
+    this.setVelocityX(wallJumpDirection * this.WALL_JUMP_VELOCITY_X);
+    
+    // Update facing direction to match jump direction
+    this.facingDirection = wallJumpDirection;
+    
+    // Wall jump consumes all remaining jumps - player can't jump again until landing
+    this.jumpsRemaining = 0;
+    this.hasJumped = true;
+    
+    // Clear wall touch state to prevent immediate wall jump repetition
+    this.lastWallTouchTime = 0;
+    this.lastWallDirection = 0;
+    
+    console.log(`Wall jump! Direction: ${wallJumpDirection > 0 ? 'RIGHT' : 'LEFT'}`);
   }
 
   private updateAnimations(): void {
