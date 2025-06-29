@@ -11,7 +11,7 @@ export class Preloader extends Scene {
 
     this.load.image('sky', 'sky.png');
     this.load.image('px_bg', 'px_bg.png');
-    this.load.image('bg', 'bg.png');
+    this.load.image('bg7', 'bg7.png');
     this.load.image('ground', 'ground.png');
     this.load.image('ground2', 'ground_2.png');
     this.load.image('grassy_floor', 'grassy_floor.png');
@@ -24,12 +24,19 @@ export class Preloader extends Scene {
     this.load.spritesheet('hornet-attack', 'hornet_attack.png', {
         frameWidth: 40, frameHeight: 32  // Correct dimensions: 40px wide x 32px high
     });
+    this.load.spritesheet('bully', 'huskbullypixel.png', {
+        frameWidth: 32, frameHeight: 32  // Adjust frame size based on your spritesheet
+    });
 
     // Load tilemap assets
     this.load.tilemapTiledJSON('level0-map', 'game.json');
     this.load.spritesheet('grass-spritesheet', 'grass-spritesheet.png', {
         frameWidth: 32, frameHeight: 32
     });
+    // Load the new island tileset
+    this.load.image('island', 'island.png');
+    // Load the grass_tiles tileset
+    this.load.image('grass_tiles', 'grass_tiles.png');
   }
 
   create() {

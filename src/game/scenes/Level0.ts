@@ -4,14 +4,19 @@ import Phaser from 'phaser';
 import { EventBus } from '../EventBus';
 import { Player } from '../objects/Player';
 import { Sword } from '../objects/Sword';
+import { Bully } from '../objects/Bully';
 
 export class Level0 extends Scene {
   // Core game objects
   private map: Phaser.Tilemaps.Tilemap;
-  private tileset: Phaser.Tilemaps.Tileset;
+  private grassTileset: Phaser.Tilemaps.Tileset;
+  private islandTileset: Phaser.Tilemaps.Tileset;
+  private grassTilesTileset: Phaser.Tilemaps.Tileset | null = null;
   private sceneLayer: Phaser.Tilemaps.TilemapLayer;
+  private scene2Layer: Phaser.Tilemaps.TilemapLayer;
   player: Player;
   sword: Sword;
+  bullies: Bully[] = [];
   cursors: Phaser.Types.Input.Keyboard.CursorKeys;
 
   // Action platformer controls
@@ -33,53 +38,149 @@ export class Level0 extends Scene {
   }
 
   create() {
-    // Add a simple tiled background using the same bg image from Tiled
+    // Add a tiled background using the same bg image from Tiled with proper offset
     const mapWidthPx = 100 * 32; // Map is 100 tiles wide, each 32px
     const mapHeightPx = 20 * 32; // Map is 20 tiles high, each 32px
     
-    // Get the actual bg texture dimensions
-    const bgTexture = this.textures.get('bg');
+    // Get the actual bg7 texture dimensions
+    const bgTexture = this.textures.get('bg7');
+    
+    // Check if texture loaded successfully
+    if (!bgTexture) {
+      console.error('bg7 texture not found! Available textures:', this.textures.list);
+      return;
+    }
+    
     const bgWidth = bgTexture.source[0].width;
     const bgHeight = bgTexture.source[0].height;
     
     console.log('Background texture dimensions:', bgWidth, 'x', bgHeight);
-    
-    // Tile the background to cover the entire map with no offset (like Tiled does)
-    for (let x = 0; x < mapWidthPx; x += bgWidth) {
-      for (let y = 0; y < mapHeightPx; y += bgHeight) {
-        const bgImage = this.add.image(x, y, 'bg');
-        bgImage.setOrigin(0, 0); // Position by top-left corner instead of center
-      }
-    }
-
-    // Load the tilemap
-    this.map = this.make.tilemap({ key: 'level0-map' });
-    
-    // Add the tileset to the map (first param is name in JSON, second is the loaded texture key)
-    const tileset = this.map.addTilesetImage('grass-spritesheet', 'grass-spritesheet');
-    if (!tileset) {
-      throw new Error('Failed to load grass-spritesheet tileset');
-    }
-    this.tileset = tileset;
-    
-    console.log('Tileset loaded successfully:', {
-      name: tileset.name,
-      firstgid: tileset.firstgid,
-      total: tileset.total,
-      image: tileset.image?.key
+    console.log('Background texture info:', {
+      key: bgTexture.key,
+      width: bgWidth,
+      height: bgHeight,
+      source: bgTexture.source[0]
     });
     
-    // Create the scene layer (this contains the solid platforms)
-    // Try creating with explicit parameters
-    const sceneLayer = this.map.createLayer('scene', this.tileset, 0, 0);
+    // Load the tilemap first to get the background layer offset
+    this.map = this.make.tilemap({ key: 'level0-map' });
+    
+    // Get background offset and parallax from the tilemap data
+    let offsetX = 0;
+    let offsetY = 0;
+    let parallaxX = 1.0;
+    let parallaxY = 1.0;
+    
+    // Find the background layer in the tilemap data
+    const tilemapData = this.cache.tilemap.get('level0-map');
+    const backgroundLayer = tilemapData.data.layers.find((layer: any) => layer.type === 'imagelayer' && layer.name === 'background');
+    
+    if (backgroundLayer) {
+      offsetX = backgroundLayer.offsetx || 0;
+      offsetY = backgroundLayer.offsety || 0;
+      parallaxX = backgroundLayer.parallaxx || 1.0;
+      parallaxY = backgroundLayer.parallaxy || 1.0;
+      console.log('Background properties from Tiled:', {
+        offsetX,
+        offsetY,
+        parallaxX,
+        parallaxY
+      });
+    } else {
+      console.log('No background layer found, using default values');
+    }
+    
+    // Create a container for background images to apply parallax
+    const backgroundContainer = this.add.container(0, 0);
+    
+    // Tile the background to cover the entire map with the proper offset
+    // We need to start from a position that accounts for the offset
+    const startX = Math.floor(offsetX / bgWidth) * bgWidth;
+    const startY = Math.floor(offsetY / bgHeight) * bgHeight;
+    const endX = mapWidthPx + bgWidth;
+    const endY = mapHeightPx + bgHeight;
+    
+    for (let x = startX; x < endX; x += bgWidth) {
+      for (let y = startY; y < endY; y += bgHeight) {
+        const bgImage = this.add.image(x + offsetX, y + offsetY, 'bg7');
+        bgImage.setOrigin(0, 0); // Position by top-left corner instead of center
+        backgroundContainer.add(bgImage);
+      }
+    }
+    
+    // Store the background container and parallax values for camera following
+    (this as any).backgroundContainer = backgroundContainer;
+    (this as any).parallaxX = parallaxX;
+    (this as any).parallaxY = parallaxY;
+    
+    console.log('Background container created with', backgroundContainer.list.length, 'images');
+    
+    // Add all tilesets to the map
+    const grassTileset = this.map.addTilesetImage('grass-spritesheet', 'grass-spritesheet');
+    if (!grassTileset) {
+      throw new Error('Failed to load grass-spritesheet tileset');
+    }
+    this.grassTileset = grassTileset;
+    
+    const islandTileset = this.map.addTilesetImage('island', 'island');
+    if (!islandTileset) {
+      throw new Error('Failed to load island tileset');
+    }
+    this.islandTileset = islandTileset;
+    
+    // Try to load grass_tiles tileset (it may not exist in the map yet)
+    let grassTilesTileset = null;
+    try {
+      grassTilesTileset = this.map.addTilesetImage('grass_tiles', 'grass_tiles');
+      this.grassTilesTileset = grassTilesTileset;
+    } catch (error) {
+      console.log('grass_tiles tileset not found in map, skipping...');
+    }
+    
+    console.log('Tilesets loaded successfully:', {
+      grass: {
+        name: grassTileset.name,
+        firstgid: grassTileset.firstgid,
+        total: grassTileset.total,
+        image: grassTileset.image?.key
+      },
+      island: {
+        name: islandTileset.name,
+        firstgid: islandTileset.firstgid,
+        total: islandTileset.total,
+        image: islandTileset.image?.key
+      },
+      grassTiles: grassTilesTileset ? {
+        name: grassTilesTileset.name,
+        firstgid: grassTilesTileset.firstgid,
+        total: grassTilesTileset.total,
+        image: grassTilesTileset.image?.key
+      } : 'Not found in map'
+    });
+    
+    // Create the scene layer with all available tilesets
+    const tilesets = [this.grassTileset, this.islandTileset];
+    if (this.grassTilesTileset) {
+      tilesets.push(this.grassTilesTileset);
+    }
+    const sceneLayer = this.map.createLayer('scene', tilesets, 0, 0);
     if (!sceneLayer) {
       throw new Error('Failed to create scene layer');
     }
     this.sceneLayer = sceneLayer;
     
-    // Make sure the layer is visible and active
+    // Create the scene2 layer with the same tilesets
+    const scene2Layer = this.map.createLayer('scene2', tilesets, 0, 0);
+    if (!scene2Layer) {
+      throw new Error('Failed to create scene2 layer');
+    }
+    this.scene2Layer = scene2Layer;
+    
+    // Make sure both layers are visible and active
     this.sceneLayer.setVisible(true);
     this.sceneLayer.setActive(true);
+    this.scene2Layer.setVisible(true);
+    this.scene2Layer.setActive(true);
     
     console.log('Scene layer created:', {
       name: this.sceneLayer.layer?.name,
@@ -88,18 +189,21 @@ export class Level0 extends Scene {
       layerData: this.sceneLayer.layer
     });
     
-    // Set collision for specific tile ranges that we know exist (1-26)
-    this.sceneLayer.setCollisionBetween(1, 26);
-    // this.sceneLayer.setCollisionByProperty({ collides: true });
+    console.log('Scene2 layer created:', {
+      name: this.scene2Layer.layer?.name,
+      visible: this.scene2Layer.visible,
+      tilesTotal: this.scene2Layer.layer?.data?.length,
+      layerData: this.scene2Layer.layer
+    });
     
-    // Also try setting tile callbacks as an alternative
-    for (let i = 1; i <= 26; i++) {
-      this.sceneLayer.setTileIndexCallback(i, () => {
-        console.log('Tile callback fired for index:', i);
-      }, this);
-    }
+    // Set collision ONLY based on properties set in Tiled
+    // This will respect the individual tile collision properties you set
+    this.sceneLayer.setCollisionByProperty({ collides: true });
+    this.sceneLayer.setCollisionByProperty({ collidable: true });
+    this.scene2Layer.setCollisionByProperty({ collides: true });
+    this.scene2Layer.setCollisionByProperty({ collidable: true });
     
-    console.log('Set collision for tiles 1-26');
+    console.log('Set collision based on tile properties for both scene and scene2 layers');
     
     console.log('Collision set for all non-zero tiles in scene layer');
     
@@ -133,19 +237,33 @@ export class Level0 extends Scene {
     });
 
     // Create player at a good starting position
-    // Starting near the left side, above the ground level (row 18 * 32 = 576px)
-    this.player = new Player(this, 100, 500);
+    // Ground is 2 tiles from bottom (row 18), so spawn player just above it
+    const groundY = (mapHeight / 32 - 2) * 32; // Ground level in pixels
+    const playerSpawnY = groundY - 48; // Spawn 48px above ground (1.5 tiles)
+    this.player = new Player(this, 100, playerSpawnY);
+    
+    console.log('Player spawn calculation:', {
+      mapHeight: mapHeight,
+      mapTilesHigh: mapHeight / 32,
+      groundTileRow: mapHeight / 32 - 2,
+      groundY: groundY,
+      playerSpawnY: playerSpawnY
+    });
     
     // Set up collision between player and the tilemap layer
     console.log('Setting up player collision...');
     
-    // Create collider without any callbacks first
+    // Create colliders for both scene layers
     const collider = this.physics.add.collider(this.player, this.sceneLayer);
-    console.log('Collider created:', collider);
+    const collider2 = this.physics.add.collider(this.player, this.scene2Layer);
+    console.log('Colliders created:', { scene: collider, scene2: collider2 });
     
-    // Add overlap detector to see if there are any interactions at all
+    // Add overlap detectors for both layers
     this.physics.add.overlap(this.player, this.sceneLayer, () => {
-      console.log('OVERLAP DETECTED! Player is touching tiles');
+      console.log('OVERLAP DETECTED! Player is touching scene layer tiles');
+    });
+    this.physics.add.overlap(this.player, this.scene2Layer, () => {
+      console.log('OVERLAP DETECTED! Player is touching scene2 layer tiles');
     });
     
     // Alternative: Try using world collision bounds for testing
@@ -214,13 +332,31 @@ export class Level0 extends Scene {
     });
 
     // Debug: Check tileset loading
-    console.log('Tileset info:', {
-      name: this.tileset.name,
-      image: this.tileset.image,
-      firstgid: this.tileset.firstgid,
-      columns: this.tileset.columns,
-      total: this.tileset.total
+    console.log('Grass tileset info:', {
+      name: this.grassTileset.name,
+      image: this.grassTileset.image,
+      firstgid: this.grassTileset.firstgid,
+      columns: this.grassTileset.columns,
+      total: this.grassTileset.total
     });
+    
+    console.log('Island tileset info:', {
+      name: this.islandTileset.name,
+      image: this.islandTileset.image,
+      firstgid: this.islandTileset.firstgid,
+      columns: this.islandTileset.columns,
+      total: this.islandTileset.total
+    });
+    
+    if (this.grassTilesTileset) {
+      console.log('Grass tiles tileset info:', {
+        name: this.grassTilesTileset.name,
+        image: this.grassTilesTileset.image,
+        firstgid: this.grassTilesTileset.firstgid,
+        columns: this.grassTilesTileset.columns,
+        total: this.grassTilesTileset.total
+      });
+    }
 
     // Create sword attached to player
     this.sword = new Sword(this, this.player);
@@ -265,6 +401,27 @@ export class Level0 extends Scene {
     console.log('Camera setup with 3x zoom to compensate for native sprite sizes');
   }
 
+  private updateParallax(): void {
+    // Apply parallax scrolling to background
+    const backgroundContainer = (this as any).backgroundContainer;
+    const parallaxX = (this as any).parallaxX;
+    const parallaxY = (this as any).parallaxY;
+    
+    if (backgroundContainer && parallaxX !== undefined && parallaxY !== undefined) {
+      const camera = this.cameras.main;
+      
+      // Calculate parallax offset based on camera position
+      // Parallax factor > 1 means background moves faster (further away effect)
+      // Parallax factor < 1 means background moves slower (closer effect)
+      const parallaxOffsetX = camera.scrollX * (1 - (1 / parallaxX));
+      const parallaxOffsetY = camera.scrollY * (1 - (1 / parallaxY));
+      
+      // Apply the parallax offset to the background container
+      backgroundContainer.x = -parallaxOffsetX;
+      backgroundContainer.y = -parallaxOffsetY;
+    }
+  }
+
   update(time: number, delta: number) {
     // Handle input with action platformer controls
     const leftPressed = this.cursors.left.isDown;
@@ -301,6 +458,9 @@ export class Level0 extends Scene {
 
     // Update sword position and animation
     this.sword.update();
+
+    // Apply parallax scrolling to background
+    this.updateParallax();
 
     // Track input state for next frame
     this.wasJumpDown = jumpPressed;
