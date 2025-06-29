@@ -16,7 +16,7 @@ export class MainMenu extends Scene {
     this.background.setScale(1.8, 1.3); // Scale to fit the new resolution
     
     // Add title
-    this.titleText = this.add.text(720, 200, 'Top secret', {
+    this.titleText = this.add.text(720, 200, 'Unfinished Business', {
       fontFamily: 'Arial Black',
       fontSize: 64,
       color: '#ffffff',

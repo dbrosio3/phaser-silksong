@@ -33,6 +33,13 @@ export class Level0 extends Scene {
   private wasFocusDown: boolean = false;
   private wasDashDown: boolean = false;
 
+  // Collision tracking
+  private lastBullyCollisionTime: Map<Bully, number> = new Map();
+  private lastBullyAttackTime: Map<Bully, number> = new Map();
+  private readonly COLLISION_COOLDOWN = 500; // ms between damage from same bully
+  private readonly ATTACK_COOLDOWN = 300; // ms between sword attacks on same bully
+  private readonly PLAYER_ATTACK_RANGE = 40; // Player's sword reach (longer than bully attack range)
+
   constructor() {
     super('Level0');
   }
@@ -54,13 +61,7 @@ export class Level0 extends Scene {
     const bgWidth = bgTexture.source[0].width;
     const bgHeight = bgTexture.source[0].height;
     
-    console.log('Background texture dimensions:', bgWidth, 'x', bgHeight);
-    console.log('Background texture info:', {
-      key: bgTexture.key,
-      width: bgWidth,
-      height: bgHeight,
-      source: bgTexture.source[0]
-    });
+    // Background texture loaded successfully
     
     // Load the tilemap first to get the background layer offset
     this.map = this.make.tilemap({ key: 'level0-map' });
@@ -80,14 +81,9 @@ export class Level0 extends Scene {
       offsetY = backgroundLayer.offsety || 0;
       parallaxX = backgroundLayer.parallaxx || 1.0;
       parallaxY = backgroundLayer.parallaxy || 1.0;
-      console.log('Background properties from Tiled:', {
-        offsetX,
-        offsetY,
-        parallaxX,
-        parallaxY
-      });
+      // Background properties loaded from Tiled
     } else {
-      console.log('No background layer found, using default values');
+      // Using default background values
     }
     
     // Create a container for background images to apply parallax
@@ -113,7 +109,7 @@ export class Level0 extends Scene {
     (this as any).parallaxX = parallaxX;
     (this as any).parallaxY = parallaxY;
     
-    console.log('Background container created with', backgroundContainer.list.length, 'images');
+    // Background container created successfully
     
     // Add all tilesets to the map
     const grassTileset = this.map.addTilesetImage('grass-spritesheet', 'grass-spritesheet');
@@ -134,29 +130,10 @@ export class Level0 extends Scene {
       grassTilesTileset = this.map.addTilesetImage('grass_tiles', 'grass_tiles');
       this.grassTilesTileset = grassTilesTileset;
     } catch (error) {
-      console.log('grass_tiles tileset not found in map, skipping...');
+      // grass_tiles tileset not found in map, skipping
     }
     
-    console.log('Tilesets loaded successfully:', {
-      grass: {
-        name: grassTileset.name,
-        firstgid: grassTileset.firstgid,
-        total: grassTileset.total,
-        image: grassTileset.image?.key
-      },
-      island: {
-        name: islandTileset.name,
-        firstgid: islandTileset.firstgid,
-        total: islandTileset.total,
-        image: islandTileset.image?.key
-      },
-      grassTiles: grassTilesTileset ? {
-        name: grassTilesTileset.name,
-        firstgid: grassTilesTileset.firstgid,
-        total: grassTilesTileset.total,
-        image: grassTilesTileset.image?.key
-      } : 'Not found in map'
-    });
+    // Tilesets loaded successfully
     
     // Create the scene layer with all available tilesets
     const tilesets = [this.grassTileset, this.islandTileset];
@@ -182,19 +159,7 @@ export class Level0 extends Scene {
     this.scene2Layer.setVisible(true);
     this.scene2Layer.setActive(true);
     
-    console.log('Scene layer created:', {
-      name: this.sceneLayer.layer?.name,
-      visible: this.sceneLayer.visible,
-      tilesTotal: this.sceneLayer.layer?.data?.length,
-      layerData: this.sceneLayer.layer
-    });
-    
-    console.log('Scene2 layer created:', {
-      name: this.scene2Layer.layer?.name,
-      visible: this.scene2Layer.visible,
-      tilesTotal: this.scene2Layer.layer?.data?.length,
-      layerData: this.scene2Layer.layer
-    });
+    // Scene layers created successfully
     
     // Set collision ONLY based on properties set in Tiled
     // This will respect the individual tile collision properties you set
@@ -203,38 +168,14 @@ export class Level0 extends Scene {
     this.scene2Layer.setCollisionByProperty({ collides: true });
     this.scene2Layer.setCollisionByProperty({ collidable: true });
     
-    console.log('Set collision based on tile properties for both scene and scene2 layers');
-    
-    console.log('Collision set for all non-zero tiles in scene layer');
-    
-    // Debug: Check collision after setting it
-    console.log('Collision set for tiles. Checking tile at ground:');
-    const testTile = this.map.getTileAt(3, 18, false, 'scene');
-    if (testTile) {
-      console.log('Test tile collision properties:');
-      console.log('- collides:', testTile.collides);
-      console.log('- collideUp:', testTile.collideUp);
-      console.log('- collideDown:', testTile.collideDown);
-      console.log('- collideLeft:', testTile.collideLeft);
-      console.log('- collideRight:', testTile.collideRight);
-      console.log('- index:', testTile.index);
-    }
-    
-    // Debug: Log collision setup
-    console.log('Tilemap loaded:', this.map);
-    console.log('Scene layer created:', this.sceneLayer);
-    console.log('Map dimensions:', this.map.widthInPixels, 'x', this.map.heightInPixels);
+    // Collision set up based on tile properties
     
     // Set the world bounds to match the tilemap
     const mapWidth = this.map.widthInPixels;
     const mapHeight = this.map.heightInPixels;
     this.physics.world.setBounds(0, 0, mapWidth, mapHeight);
     
-    console.log('World bounds set to:', {
-      width: mapWidth,
-      height: mapHeight,
-      bottomY: mapHeight
-    });
+    // World bounds set to match tilemap
 
     // Create player at a good starting position
     // Ground is 2 tiles from bottom (row 18), so spawn player just above it
@@ -242,124 +183,27 @@ export class Level0 extends Scene {
     const playerSpawnY = groundY - 48; // Spawn 48px above ground (1.5 tiles)
     this.player = new Player(this, 100, playerSpawnY);
     
-    console.log('Player spawn calculation:', {
-      mapHeight: mapHeight,
-      mapTilesHigh: mapHeight / 32,
-      groundTileRow: mapHeight / 32 - 2,
-      groundY: groundY,
-      playerSpawnY: playerSpawnY
-    });
+    // Player spawn position calculated
     
     // Set up collision between player and the tilemap layer
-    console.log('Setting up player collision...');
+    // Setting up player collision
     
     // Create colliders for both scene layers
     const collider = this.physics.add.collider(this.player, this.sceneLayer);
     const collider2 = this.physics.add.collider(this.player, this.scene2Layer);
-    console.log('Colliders created:', { scene: collider, scene2: collider2 });
+    // Colliders created successfully
     
-    // Add overlap detectors for both layers
-    this.physics.add.overlap(this.player, this.sceneLayer, () => {
-      console.log('OVERLAP DETECTED! Player is touching scene layer tiles');
-    });
-    this.physics.add.overlap(this.player, this.scene2Layer, () => {
-      console.log('OVERLAP DETECTED! Player is touching scene2 layer tiles');
-    });
+    // Remove debug overlap detectors (they were causing spam)
     
-    // Alternative: Try using world collision bounds for testing
-    console.log('Player physics body:', this.player.body);
-    
-    // Debug: Check if collision is working
-    console.log('Player created at:', this.player.x, this.player.y);
-    console.log('Collision set up between player and scene layer');
-    
-    // Debug: Check what tiles are at specific positions
-    const playerTileX = Math.floor(this.player.x / 32);
-    const playerTileY = Math.floor(this.player.y / 32);
-    const groundTileY = 18; // Ground should be at row 18
-    
-    console.log('Player tile position:', playerTileX, playerTileY);
-    console.log('Ground should be at row:', groundTileY);
-    
-    // Check what tile is at the ground position
-    const groundTile = this.map.getTileAt(playerTileX, groundTileY, false, 'scene');
-    console.log('Tile at ground position:', groundTile);
-    
-    // Debug: Check several tiles around the ground area
-    console.log('Checking tiles in ground area:');
-    for (let x = 0; x < 10; x++) {
-      for (let y = 17; y < 20; y++) {
-        const tile = this.map.getTileAt(x, y, false, 'scene');
-        if (tile && tile.index > 0) {
-          console.log(`Tile at (${x}, ${y}):`, {
-            index: tile.index,
-            pixelX: tile.pixelX,
-            pixelY: tile.pixelY,
-            collides: tile.collides,
-            layer: tile.layer?.name,
-            faceTop: tile.faceTop,
-            faceBottom: tile.faceBottom,
-            faceLeft: tile.faceLeft,
-            faceRight: tile.faceRight
-          });
-        }
-      }
-    }
-    
-    // Debug: Check if the scene layer has collision set
-    console.log('Scene layer collision info:', {
-      layer: this.sceneLayer,
-      tilemap: this.sceneLayer.tilemap,
-      layerIndex: this.sceneLayer.layerIndex
-    });
+    // Player collision configured
 
-    // Debug: Check player physics body details
-    const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
-    console.log('Player physics body details:', {
-      playerCenter: { x: this.player.x, y: this.player.y },
-      bodyBounds: {
-        x: playerBody?.x,
-        y: playerBody?.y,
-        width: playerBody?.width,
-        height: playerBody?.height,
-        bottom: playerBody ? playerBody.y + playerBody.height : 'N/A'
-      },
-      velocity: {
-        x: playerBody?.velocity.x,
-        y: playerBody?.velocity.y
-      },
-      tileAtFeet: `Row ${Math.floor((this.player.y + 16) / 32)} (Y=${Math.floor((this.player.y + 16) / 32) * 32})`
-    });
-
-    // Debug: Check tileset loading
-    console.log('Grass tileset info:', {
-      name: this.grassTileset.name,
-      image: this.grassTileset.image,
-      firstgid: this.grassTileset.firstgid,
-      columns: this.grassTileset.columns,
-      total: this.grassTileset.total
-    });
-    
-    console.log('Island tileset info:', {
-      name: this.islandTileset.name,
-      image: this.islandTileset.image,
-      firstgid: this.islandTileset.firstgid,
-      columns: this.islandTileset.columns,
-      total: this.islandTileset.total
-    });
-    
-    if (this.grassTilesTileset) {
-      console.log('Grass tiles tileset info:', {
-        name: this.grassTilesTileset.name,
-        image: this.grassTilesTileset.image,
-        firstgid: this.grassTilesTileset.firstgid,
-        columns: this.grassTilesTileset.columns,
-        total: this.grassTilesTileset.total
-      });
-    }
+    // Tilesets loaded and configured
 
     // Create sword attached to player
     this.sword = new Sword(this, this.player);
+
+    // Create bullies (enemies) at various positions on the map
+    this.createBullies();
 
     // Setup camera to follow the player
     this.setupCamera();
@@ -398,7 +242,167 @@ export class Level0 extends Scene {
     // Enable pixel-perfect rendering
     camera.roundPixels = true;
     
-    console.log('Camera setup with 3x zoom to compensate for native sprite sizes');
+    // Camera configured with zoom and following
+  }
+
+  private createBullies(): void {
+    // Calculate ground level for enemy spawning
+    const mapHeight = this.map.heightInPixels;
+    const groundY = (mapHeight / 32 - 2) * 32; // Ground level in pixels
+    const enemySpawnY = groundY - 96; // Spawn 3 tiles (96px) above ground
+
+    // Create bullies at various positions across the map
+    const bullyPositions = [
+      { x: 800, y: enemySpawnY },   // Early in the level
+      { x: 1200, y: enemySpawnY },   // Mid level
+      { x: 1600, y: enemySpawnY },  // Later in level
+    ];
+
+    bullyPositions.forEach(pos => {
+      const bully = new Bully(this, pos.x, pos.y, this.player);
+      this.bullies.push(bully);
+
+      // Set up collision between bully and tilemap layers
+      this.physics.add.collider(bully, this.sceneLayer);
+      this.physics.add.collider(bully, this.scene2Layer);
+
+      // Set up solid collision between player and bully (player can't pass through)
+      this.physics.add.collider(this.player, bully, () => {
+        this.handleBullyPlayerCollision(bully);
+      });
+    });
+
+    // Listen for bully events
+    this.events.on('bully-attack', this.handleBullyAttack, this);
+    this.events.on('bully-death', this.handleBullyDeath, this);
+    
+    // Listen for player events
+    this.events.on('player-death', this.handlePlayerDeath, this);
+
+    // Bullies created and configured
+  }
+
+  private handleBullyPlayerCollision(bully: Bully): void {
+    // Don't collide with dead enemies
+    if (bully.isDead) {
+      // Disable collision with this dead bully
+      const colliders = this.physics.world.colliders.getActive().filter((collider: any) => {
+        return (collider.bodyA === this.player.body && collider.bodyB === bully.body) ||
+               (collider.bodyB === this.player.body && collider.bodyA === bully.body);
+      });
+      colliders.forEach((collider: any) => collider.destroy());
+      return;
+    }
+    
+    const currentTime = this.time.now;
+    const lastCollisionTime = this.lastBullyCollisionTime.get(bully) || 0;
+    
+    // Check if bully can damage player and apply knockback
+    if (!this.player.isInvincible() && 
+        currentTime - lastCollisionTime > this.COLLISION_COOLDOWN) {
+      
+      // Player collided with bully
+      
+      // Apply damage to player
+      this.player.takeDamage(1);
+      
+      // Apply knockback to player (push away from bully)
+      const knockbackDirection = this.player.x > bully.x ? 1 : -1; // Push away from bully
+      const knockbackForce = 200;
+      const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
+      
+      // Apply horizontal knockback
+      playerBody.setVelocityX(knockbackDirection * knockbackForce);
+      
+      // Small upward bounce for more dramatic effect
+      if (playerBody.blocked.down) {
+        playerBody.setVelocityY(-100);
+      }
+      
+      this.lastBullyCollisionTime.set(bully, currentTime);
+      
+      // Player knocked back from collision
+    }
+  }
+
+  private checkPlayerAttacks(): void {
+    // Check if player is attacking
+    if (!this.player.currentlyAttacking) {
+      return;
+    }
+
+    const currentTime = this.time.now;
+    
+    // Check all bullies within attack range
+    this.bullies.forEach(bully => {
+      if (bully.isDead) {
+        return;
+      }
+
+      const distance = Phaser.Math.Distance.Between(this.player.x, this.player.y, bully.x, bully.y);
+      const lastAttackTime = this.lastBullyAttackTime.get(bully) || 0;
+
+      // Check if bully is within player's attack range and attack cooldown has passed
+      if (distance <= this.PLAYER_ATTACK_RANGE && 
+          currentTime - lastAttackTime > this.ATTACK_COOLDOWN) {
+        
+        // Check if player is facing the right direction
+        const playerFacing = this.player.currentFacingDirection;
+        const bullyDirection = bully.x > this.player.x ? 1 : -1;
+        
+        if (playerFacing === bullyDirection) {
+          // Player successfully hit bully
+          bully.takeDamage(1, this.player.x);
+          this.lastBullyAttackTime.set(bully, currentTime);
+        }
+      }
+    });
+  }
+
+  private handleBullyAttack(event: any): void {
+    const { damage, x, y } = event;
+    // Bully attacked
+    
+    // Check if player is close enough to take damage and not invincible
+    const distanceToPlayer = Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y);
+    if (distanceToPlayer <= 25 && !this.player.isInvincible()) { // Attack range (matches bully attack range)
+      // Player takes damage from bully attack
+      this.player.takeDamage(damage);
+    }
+  }
+
+  private handleBullyDeath(event: any): void {
+    const { bully } = event;
+    // Bully died - starting death animation
+    
+    // Clean up collision tracking for dead bully (but keep it in array for death animation)
+    this.lastBullyCollisionTime.delete(bully);
+    this.lastBullyAttackTime.delete(bully);
+    
+    // You could add death effects, score increase, item drops, etc. here
+  }
+
+  private handlePlayerDeath(event: any): void {
+    // Player died - Game Over
+    
+    // Create black overlay for fade effect
+    const blackOverlay = this.add.rectangle(0, 0, this.cameras.main.width * 2, this.cameras.main.height * 2, 0x000000);
+    blackOverlay.setOrigin(0, 0);
+    blackOverlay.setDepth(1000); // Above everything
+    blackOverlay.setAlpha(0); // Start transparent
+    blackOverlay.setScrollFactor(0); // Don't scroll with camera
+    
+    // Fade to black over 1 second, then restart
+    this.tweens.add({
+      targets: blackOverlay,
+      alpha: 1,
+      duration: 1000,
+      ease: 'Power2',
+      onComplete: () => {
+        // Restarting level
+        this.scene.restart();
+      }
+    });
   }
 
   private updateParallax(): void {
@@ -423,6 +427,23 @@ export class Level0 extends Scene {
   }
 
   update(time: number, delta: number) {
+    // Don't process input or updates if player is dead
+    if (this.player.isDead) {
+      // Still update visual effects for dead player
+      this.player.update(time, delta);
+      
+      // Still update bullies and visual effects (including dead ones for death animation)
+      this.bullies.forEach(bully => {
+        bully.update(time, delta);
+      });
+      
+      // Clean up destroyed bullies from the array
+      this.bullies = this.bullies.filter(bully => bully.active);
+      
+      this.updateParallax();
+      return;
+    }
+
     // Handle input with action platformer controls
     const leftPressed = this.cursors.left.isDown;
     const rightPressed = this.cursors.right.isDown;
@@ -458,6 +479,17 @@ export class Level0 extends Scene {
 
     // Update sword position and animation
     this.sword.update();
+
+    // Check for player attacks on bullies (with extended range)
+    this.checkPlayerAttacks();
+
+    // Update all bullies (including dead ones for death animation)
+    this.bullies.forEach(bully => {
+      bully.update(time, delta);
+    });
+
+    // Clean up destroyed bullies from the array
+    this.bullies = this.bullies.filter(bully => bully.active);
 
     // Apply parallax scrolling to background
     this.updateParallax();

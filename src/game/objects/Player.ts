@@ -33,6 +33,13 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   // Attack overlay sprite
   private attackOverlay: Phaser.GameObjects.Sprite;
 
+  // Health and damage system
+  private readonly MAX_HEALTH = 5;
+  private health: number = this.MAX_HEALTH;
+  private readonly INVINCIBILITY_DURATION = 1000; // ms of invincibility after taking damage
+  private lastDamageTime: number = 0;
+  private hitFlashTimer: number = 0;
+
   // State tracking
   private lastGroundedTime: number = 0;
   private jumpBufferTime: number = 0;
@@ -74,7 +81,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Set physics body size compensating for sprite padding (25% each side = 50% total width)
     // Reduce width to 16px (50% of 32px) and center it
     const bodyWidth = 16; // 50% of sprite width to account for horizontal padding
-    const bodyHeight = 32; // Keep full height
+    const bodyHeight = 28; // Slightly smaller height for better collision detection
     (this.body as Phaser.Physics.Arcade.Body).setSize(bodyWidth, bodyHeight, true);
 
     // Create attack overlay sprite at native size too
@@ -154,6 +161,14 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   // Call this from the scene's update method
   update(time: number, delta: number): void {
+    // Always update visual effects regardless of death state
+    this.updateVisualEffects(time);
+    
+    // Don't process physics or input if dead
+    if (this.isDead) {
+      return;
+    }
+    
     this.updateGroundedState(time);
     this.updateWallTouchState(time);
     this.handleDashing(time);
@@ -171,9 +186,9 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
     // Debug log when state changes
     if (this.isGrounded && !wasGrounded) {
-      console.log('Player LANDED! Y position:', this.y, 'Body bottom:', body.y + body.height);
+      // Player landed
     } else if (!this.isGrounded && wasGrounded) {
-      console.log('Player started FALLING! Y position:', this.y);
+              // Player started falling
     }
 
     if (this.isGrounded) {
@@ -203,11 +218,11 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     if (this.isTouchingWallLeft && !wasTouchingWallLeft) {
       this.lastWallTouchTime = time;
       this.lastWallDirection = -1; // Left wall
-      console.log('Player touching LEFT wall');
+      // Player touching left wall
     } else if (this.isTouchingWallRight && !wasTouchingWallRight) {
       this.lastWallTouchTime = time;
       this.lastWallDirection = 1; // Right wall
-      console.log('Player touching RIGHT wall');
+      // Player touching right wall
     }
 
     // Keep track of the most recent wall touch
@@ -408,7 +423,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.lastWallTouchTime = 0;
     this.lastWallDirection = 0;
     
-    console.log(`Wall jump! Direction: ${wallJumpDirection > 0 ? 'RIGHT' : 'LEFT'}`);
+    // Wall jump executed
   }
 
   private updateAnimations(): void {
@@ -522,5 +537,74 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
 
   get currentlyAttacking(): boolean {
     return this.isAttacking;
+  }
+
+  // Health and damage methods
+  public takeDamage(damage: number = 1): void {
+    const currentTime = this.scene.time.now;
+    
+    // Check if player is still invincible from previous damage
+    if (currentTime - this.lastDamageTime < this.INVINCIBILITY_DURATION) {
+      return; // Ignore damage during invincibility period
+    }
+    
+    this.health -= damage;
+    this.lastDamageTime = currentTime;
+    
+    // Visual feedback
+    this.setTint(0xff0000); // Red flash
+    this.hitFlashTimer = 300; // Flash for 300ms
+    
+    // Player took damage - health tracking
+
+    if (this.health <= 0) {
+      this.health = 0;
+      this.handlePlayerDeath();
+    }
+  }
+  
+  private handlePlayerDeath(): void {
+    // Player died - handle death logic
+    this.setTint(0x666666); // Gray out the dead player
+    this.setVelocity(0, 0); // Stop all movement
+    
+    // Emit death event that the scene can handle
+    this.scene.events.emit('player-death', { player: this, x: this.x, y: this.y });
+  }
+  
+  private updateVisualEffects(time: number): void {
+    // Handle hit flash effect
+    if (this.hitFlashTimer > 0) {
+      this.hitFlashTimer -= 16.67; // Decrease by ~1 frame at 60fps
+      if (this.hitFlashTimer <= 0) {
+        this.clearTint();
+      }
+    }
+    
+    // Handle invincibility visual effect (flicker)
+    if (this.isInvincible()) {
+      // Flicker effect during invincibility
+      const flickerRate = 100; // Flicker every 100ms
+      const shouldBeVisible = Math.floor(time / flickerRate) % 2 === 0;
+      this.setAlpha(shouldBeVisible ? 1 : 0.3);
+    } else {
+      this.setAlpha(1); // Always visible when not invincible
+    }
+  }
+  
+  public isInvincible(): boolean {
+    return this.scene.time.now - this.lastDamageTime < this.INVINCIBILITY_DURATION;
+  }
+  
+  public get currentHealth(): number {
+    return this.health;
+  }
+  
+  public get maxHealth(): number {
+    return this.MAX_HEALTH;
+  }
+
+  public get isDead(): boolean {
+    return this.health <= 0;
   }
 }

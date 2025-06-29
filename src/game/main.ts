@@ -22,7 +22,7 @@ const config: Phaser.Types.Core.GameConfig = {
     default: 'arcade',
     arcade: {
       gravity: { y: 1400, x: 0 }, // Reduced gravity for higher jumps and better platforming feel
-      debug: true
+      debug: false
     }
   },
   scene: [

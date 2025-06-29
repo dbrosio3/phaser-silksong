@@ -25,7 +25,7 @@ export class Preloader extends Scene {
         frameWidth: 40, frameHeight: 32  // Correct dimensions: 40px wide x 32px high
     });
     this.load.spritesheet('bully', 'huskbullypixel.png', {
-        frameWidth: 32, frameHeight: 32  // Adjust frame size based on your spritesheet
+        frameWidth: 30, frameHeight: 30  // Adjust frame size based on your spritesheet
     });
 
     // Load tilemap assets
