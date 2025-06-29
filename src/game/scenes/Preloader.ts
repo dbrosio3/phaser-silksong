@@ -28,6 +28,9 @@ export class Preloader extends Scene {
         frameWidth: 30, frameHeight: 30  // Adjust frame size based on your spritesheet
     });
 
+    // Load the orb sprite
+    this.load.image('orb', 'theknightpixe_fade.png');
+
     // Load tilemap assets
     this.load.tilemapTiledJSON('level0-map', 'game.json');
     this.load.spritesheet('grass-spritesheet', 'grass-spritesheet.png', {

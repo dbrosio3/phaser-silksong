@@ -39,6 +39,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private readonly INVINCIBILITY_DURATION = 1000; // ms of invincibility after taking damage
   private lastDamageTime: number = 0;
   private hitFlashTimer: number = 0;
+  private whiteFlashSprite: Phaser.GameObjects.Sprite | null = null;
 
   // State tracking
   private lastGroundedTime: number = 0;
@@ -551,8 +552,8 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.health -= damage;
     this.lastDamageTime = currentTime;
     
-    // Visual feedback
-    this.setTint(0xff0000); // Red flash
+    // Visual feedback - create white flash overlay
+    this.createWhiteFlash();
     this.hitFlashTimer = 300; // Flash for 300ms
     
     // Player took damage - health tracking
@@ -565,6 +566,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   
   private handlePlayerDeath(): void {
     // Player died - handle death logic
+    this.removeWhiteFlash(); // Remove any active white flash
     this.setTint(0x666666); // Gray out the dead player
     this.setVelocity(0, 0); // Stop all movement
     
@@ -576,8 +578,16 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     // Handle hit flash effect
     if (this.hitFlashTimer > 0) {
       this.hitFlashTimer -= 16.67; // Decrease by ~1 frame at 60fps
+      
+      // Update white flash position to follow player
+      if (this.whiteFlashSprite) {
+        this.whiteFlashSprite.setPosition(this.x, this.y);
+        this.whiteFlashSprite.setRotation(this.rotation);
+        this.whiteFlashSprite.setFlipX(this.flipX);
+      }
+      
       if (this.hitFlashTimer <= 0) {
-        this.clearTint();
+        this.removeWhiteFlash();
       }
     }
     
@@ -589,6 +599,32 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       this.setAlpha(shouldBeVisible ? 1 : 0.3);
     } else {
       this.setAlpha(1); // Always visible when not invincible
+    }
+  }
+  
+  private createWhiteFlash(): void {
+    // Remove existing flash if any
+    this.removeWhiteFlash();
+    
+    // Create white sprite overlay that matches the player's shape
+    this.whiteFlashSprite = this.scene.add.sprite(this.x, this.y, 'hornet');
+    this.whiteFlashSprite.setFrame(this.frame.name);
+    this.whiteFlashSprite.setScale(this.scaleX, this.scaleY);
+    this.whiteFlashSprite.setOrigin(this.originX, this.originY);
+    this.whiteFlashSprite.setRotation(this.rotation);
+    this.whiteFlashSprite.setFlipX(this.flipX);
+    this.whiteFlashSprite.setDepth(this.depth + 1);
+    
+    // Single bright white layer with SCREEN blend mode
+    this.whiteFlashSprite.setBlendMode(Phaser.BlendModes.SCREEN);
+    this.whiteFlashSprite.setTint(0xffffff);
+    this.whiteFlashSprite.setAlpha(1.0); // Full opacity
+  }
+  
+  private removeWhiteFlash(): void {
+    if (this.whiteFlashSprite) {
+      this.whiteFlashSprite.destroy();
+      this.whiteFlashSprite = null;
     }
   }
   

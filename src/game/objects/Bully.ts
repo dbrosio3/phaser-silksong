@@ -38,6 +38,7 @@ export class Bully extends Phaser.Physics.Arcade.Sprite {
   // Visual effects
   private hitFlashTimer: number = 0;
   private deathTimer: number = 0;
+  private whiteFlashSprite: Phaser.GameObjects.Sprite | null = null;
   private readonly DEATH_DURATION = 10000; // ms for death animation (10 seconds)
   private readonly FALL_DURATION = 500; // ms to fall over (0.5 seconds)
   private readonly DROP_DURATION = 200; // ms to drop down when laying (0.2 seconds)
@@ -57,6 +58,9 @@ export class Bully extends Phaser.Physics.Arcade.Sprite {
     
     // Scale up the bully to be closer to player size
     this.setScale(1.2);
+    
+    // Adjust visual positioning to crop 15% from bottom
+    this.setOrigin(0.5, 0.85); // Move origin up to crop bottom 15%
     
     // Set physics body size (adjusted for scale and sprite padding)
     // Account for 25% padding on each side like the player
@@ -374,6 +378,7 @@ export class Bully extends Phaser.Physics.Arcade.Sprite {
     
     // Destroy after full death duration (10 seconds)
     if (deathProgress >= 1) {
+      this.removeWhiteFlash(); // Clean up white flash before destroying
       this.destroy();
     }
   }
@@ -422,9 +427,43 @@ export class Bully extends Phaser.Physics.Arcade.Sprite {
     // Handle hit flash effect
     if (this.hitFlashTimer > 0) {
       this.hitFlashTimer -= 16.67; // Decrease by ~1 frame at 60fps
-      if (this.hitFlashTimer <= 0) {
-        this.clearTint();
+      
+      // Update white flash position to follow bully
+      if (this.whiteFlashSprite) {
+        this.whiteFlashSprite.setPosition(this.x, this.y);
+        this.whiteFlashSprite.setRotation(this.rotation);
+        this.whiteFlashSprite.setFlipX(this.flipX);
       }
+      
+      if (this.hitFlashTimer <= 0) {
+        this.removeWhiteFlash();
+      }
+    }
+  }
+  
+  private createWhiteFlash(): void {
+    // Remove existing flash if any
+    this.removeWhiteFlash();
+    
+    // Create white sprite overlay that matches the bully's shape
+    this.whiteFlashSprite = this.scene.add.sprite(this.x, this.y, 'bully');
+    this.whiteFlashSprite.setFrame(this.frame.name);
+    this.whiteFlashSprite.setScale(this.scaleX, this.scaleY);
+    this.whiteFlashSprite.setOrigin(this.originX, this.originY);
+    this.whiteFlashSprite.setRotation(this.rotation);
+    this.whiteFlashSprite.setFlipX(this.flipX);
+    this.whiteFlashSprite.setDepth(this.depth + 1);
+    
+    // Single bright white layer with SCREEN blend mode
+    this.whiteFlashSprite.setBlendMode(Phaser.BlendModes.SCREEN);
+    this.whiteFlashSprite.setTint(0xffffff);
+    this.whiteFlashSprite.setAlpha(1.0); // Full opacity
+  }
+  
+  private removeWhiteFlash(): void {
+    if (this.whiteFlashSprite) {
+      this.whiteFlashSprite.destroy();
+      this.whiteFlashSprite = null;
     }
   }
   
@@ -470,8 +509,8 @@ export class Bully extends Phaser.Physics.Arcade.Sprite {
     
     this.health -= damage;
     
-    // Visual feedback
-    this.setTint(0xffffff); // White flash
+    // Visual feedback - create white flash overlay
+    this.createWhiteFlash();
     this.hitFlashTimer = 300; // Flash for 300ms
     
     // Determine knockback direction based on attacker position
@@ -507,6 +546,7 @@ export class Bully extends Phaser.Physics.Arcade.Sprite {
   private die(): void {
     this.aiState = 'dead';
     this.deathTimer = 0; // Will be set in handleDeath
+    this.removeWhiteFlash(); // Remove any active white flash
     
     // Keep physics enabled for death animation, but disable collision with player
     const body = this.body as Phaser.Physics.Arcade.Body;

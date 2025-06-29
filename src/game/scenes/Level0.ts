@@ -5,6 +5,7 @@ import { EventBus } from '../EventBus';
 import { Player } from '../objects/Player';
 import { Sword } from '../objects/Sword';
 import { Bully } from '../objects/Bully';
+import { Orb } from '../objects/Orb';
 
 export class Level0 extends Scene {
   // Core game objects
@@ -16,15 +17,25 @@ export class Level0 extends Scene {
   private scene2Layer: Phaser.Tilemaps.TilemapLayer;
   player: Player;
   sword: Sword;
+  orb: Orb;
   bullies: Bully[] = [];
   cursors: Phaser.Types.Input.Keyboard.CursorKeys;
+
+  // Dialog system
+  private dialogBox: Phaser.GameObjects.Container | null = null;
+  private dialogText: Phaser.GameObjects.Text | null = null;
+  private isDialogActive: boolean = false;
+  private typewriterTimer: Phaser.Time.TimerEvent | null = null;
+  private currentDialogText: string = '';
+  private dialogCharIndex: number = 0;
 
   // Action platformer controls
   private actionKeys: {
     jump: Phaser.Input.Keyboard.Key;      // Z
-    attack: Phaser.Input.Keyboard.Key;    // X (future)
+    attack: Phaser.Input.Keyboard.Key;    // X (future) 
     focus: Phaser.Input.Keyboard.Key;     // C (future)
     dash: Phaser.Input.Keyboard.Key;      // Shift (future)
+    space: Phaser.Input.Keyboard.Key;     // Space for dialog
   };
 
   // Input state tracking
@@ -202,6 +213,15 @@ export class Level0 extends Scene {
     // Create sword attached to player
     this.sword = new Sword(this, this.player);
 
+    // Create orb at a specific position in the level
+    // Position it early in the level for the player to discover
+    const orbSpawnX = 400;
+    const orbSpawnY = groundY - 80; // Floating above ground
+    this.orb = new Orb(this, this.player, orbSpawnX, orbSpawnY);
+    
+    // Spawn the orb immediately at its position
+    this.orb.spawn();
+
     // Create bullies (enemies) at various positions on the map
     this.createBullies();
 
@@ -215,7 +235,8 @@ export class Level0 extends Scene {
         jump: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Z),
         attack: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X),
         focus: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C),
-        dash: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT)
+        dash: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
+        space: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
       };
     }
 
@@ -254,8 +275,8 @@ export class Level0 extends Scene {
     // Create bullies at various positions across the map
     const bullyPositions = [
       { x: 800, y: enemySpawnY },   // Early in the level
-      { x: 1200, y: enemySpawnY },   // Mid level
-      { x: 1600, y: enemySpawnY },  // Later in level
+      // { x: 1200, y: enemySpawnY },   // Mid level
+      // { x: 1600, y: enemySpawnY },  // Later in level
     ];
 
     bullyPositions.forEach(pos => {
@@ -278,6 +299,9 @@ export class Level0 extends Scene {
     
     // Listen for player events
     this.events.on('player-death', this.handlePlayerDeath, this);
+    
+    // Listen for orb events
+    this.events.on('orb-talk', this.handleOrbTalk, this);
 
     // Bullies created and configured
   }
@@ -405,6 +429,151 @@ export class Level0 extends Scene {
     });
   }
 
+  private handleOrbTalk(event: any): void {
+
+    const { text, orb } = event;
+    this.showDialog(text, orb);
+  }
+
+  private showDialog(text: string, orb: Orb): void {
+    if (this.isDialogActive) return;
+    
+    this.isDialogActive = true;
+    
+    const camera = this.cameras.main;
+    
+    // Smaller dialog positioned above center
+    const dialogX = camera.centerX;
+    const dialogY = camera.centerY - 110;
+    
+    const dialogBg = this.add.rectangle(
+      dialogX, 
+      dialogY, 
+      600, 100, // Smaller: 600x100
+      0x000000, 1 // Dark background
+    );
+    dialogBg.setScrollFactor(0); // Fixed to camera
+    dialogBg.setDepth(2000); // Very high depth
+    
+    // Add a border
+    const dialogBorder = this.add.rectangle(
+      dialogX, 
+      dialogY, 
+      604, 104, // Border slightly bigger
+      0x000000, 1 // White border
+    );
+    dialogBorder.setScrollFactor(0);
+    dialogBorder.setDepth(1999); // Behind the background
+    
+    // Dialog text - start with empty text for typewriter effect
+    this.currentDialogText = text;
+    this.dialogCharIndex = 0;
+    
+    this.dialogText = this.add.text(
+      dialogX, 
+      dialogY - 10, // Slightly above center of dialog
+      '', // Start with empty text
+      {
+        fontFamily: 'Arial',
+        fontSize: 18,
+        color: '#ffffff',
+        align: 'center',
+        padding: { x: 15, y: 8 },
+        wordWrap: { width: 550 }
+      }
+    );
+    this.dialogText.setOrigin(0.5);
+    this.dialogText.setScrollFactor(0);
+    this.dialogText.setDepth(2001);
+    
+    // Start typewriter effect
+    this.startTypewriterEffect();
+    
+    // Prompt text
+    const promptText = this.add.text(
+      dialogX, 
+      dialogY + 30, // Below the main text
+      'Continuar (espacio)', 
+      {
+        fontFamily: 'Arial',
+        fontSize: 14,
+        color: '#ffffff',
+        align: 'right',
+        padding: { x: 8, y: 4 }
+      }
+    );
+    promptText.setOrigin(0.5);
+    promptText.setScrollFactor(0);
+    promptText.setDepth(2002);
+    
+    // Store elements for cleanup
+    this.dialogBox = this.add.container(0, 0);
+    this.dialogBox.add([dialogBorder, dialogBg, this.dialogText, promptText]);
+    (this.dialogBox as any).orb = orb;
+  }
+
+  private startTypewriterEffect(): void {
+    // Clear any existing timer
+    if (this.typewriterTimer) {
+      this.typewriterTimer.destroy();
+    }
+    
+    // Create timer that adds one character every 50ms
+    this.typewriterTimer = this.time.addEvent({
+      delay: 50, // 50ms between characters
+      callback: () => {
+        if (this.dialogCharIndex < this.currentDialogText.length && this.dialogText) {
+          // Add next character
+          this.dialogCharIndex++;
+          const visibleText = this.currentDialogText.substring(0, this.dialogCharIndex);
+          this.dialogText.setText(visibleText);
+        } else {
+          // Finished typing, cleanup timer
+          if (this.typewriterTimer) {
+            this.typewriterTimer.destroy();
+            this.typewriterTimer = null;
+          }
+        }
+      },
+      repeat: this.currentDialogText.length - 1
+    });
+  }
+  
+  private skipTypewriterEffect(): void {
+    // Skip to the end of the typewriter effect
+    if (this.typewriterTimer && this.dialogText) {
+      this.typewriterTimer.destroy();
+      this.typewriterTimer = null;
+      this.dialogText.setText(this.currentDialogText);
+      this.dialogCharIndex = this.currentDialogText.length;
+    }
+  }
+
+  private closeDialog(): void {
+    if (!this.isDialogActive || !this.dialogBox) return;
+    
+    const orb = (this.dialogBox as any).orb;
+    
+    // Clean up typewriter timer
+    if (this.typewriterTimer) {
+      this.typewriterTimer.destroy();
+      this.typewriterTimer = null;
+    }
+    
+    // Clean up dialog elements
+    this.dialogBox.destroy();
+    this.dialogBox = null;
+    this.dialogText = null;
+    this.isDialogActive = false;
+    this.currentDialogText = '';
+    this.dialogCharIndex = 0;
+    
+    // Tell orb dialog is finished
+    if (orb && orb.finishTalking) {
+      orb.finishTalking();
+    }
+  }
+
   private updateParallax(): void {
     // Apply parallax scrolling to background
     const backgroundContainer = (this as any).backgroundContainer;
@@ -427,10 +596,26 @@ export class Level0 extends Scene {
   }
 
   update(time: number, delta: number) {
+    // Handle dialog input first
+    if (this.isDialogActive && this.actionKeys.space) {
+      if (Phaser.Input.Keyboard.JustDown(this.actionKeys.space)) {
+        // If typewriter is still active, skip to end. Otherwise close dialog
+        if (this.typewriterTimer) {
+          this.skipTypewriterEffect();
+        } else {
+          this.closeDialog();
+        }
+        return; // Don't process other input while dialog is active
+      }
+    }
+    
     // Don't process input or updates if player is dead
     if (this.player.isDead) {
       // Still update visual effects for dead player
       this.player.update(time, delta);
+      
+      // Still update orb for fade out effect
+      this.orb.update(time);
       
       // Still update bullies and visual effects (including dead ones for death animation)
       this.bullies.forEach(bully => {
@@ -440,6 +625,14 @@ export class Level0 extends Scene {
       // Clean up destroyed bullies from the array
       this.bullies = this.bullies.filter(bully => bully.active);
       
+      this.updateParallax();
+      return;
+    }
+
+    // Don't process game input if dialog is active
+    if (this.isDialogActive) {
+      // Still update orb during dialog
+      this.orb.update(time);
       this.updateParallax();
       return;
     }
@@ -479,6 +672,9 @@ export class Level0 extends Scene {
 
     // Update sword position and animation
     this.sword.update();
+
+    // Update orb position and animation
+    this.orb.update(time);
 
     // Check for player attacks on bullies (with extended range)
     this.checkPlayerAttacks();
