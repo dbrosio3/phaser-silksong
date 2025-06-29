@@ -26,6 +26,7 @@ export class Level0 extends Scene {
   private dialogText: Phaser.GameObjects.Text | null = null;
   private isDialogActive: boolean = false;
   private typewriterTimer: Phaser.Time.TimerEvent | null = null;
+  private autoAdvanceTimer: Phaser.Time.TimerEvent | null = null;
   private currentDialogText: string = '';
   private dialogCharIndex: number = 0;
 
@@ -36,6 +37,7 @@ export class Level0 extends Scene {
     focus: Phaser.Input.Keyboard.Key;     // C (future)
     dash: Phaser.Input.Keyboard.Key;      // Shift (future)
     space: Phaser.Input.Keyboard.Key;     // Space for dialog
+    interact: Phaser.Input.Keyboard.Key;  // A for hugging tree
   };
 
   // Input state tracking
@@ -50,6 +52,29 @@ export class Level0 extends Scene {
   private readonly COLLISION_COOLDOWN = 500; // ms between damage from same bully
   private readonly ATTACK_COOLDOWN = 300; // ms between sword attacks on same bully
   private readonly PLAYER_ATTACK_RANGE = 40; // Player's sword reach (longer than bully attack range)
+  
+  // Tree interaction system
+  private nearTree: boolean = false;
+  private interactionHint: Phaser.GameObjects.Text | null = null;
+  private readonly TREE_X_MIN = 2142; // Minimum X coordinate for tree interaction
+  private readonly TREE_X_MAX = 2238; // Maximum X coordinate for tree interaction
+  private readonly TREE_Y_MIN = 600; // Minimum Y coordinate for tree interaction  
+  private readonly TREE_Y_MAX = 800; // Maximum Y coordinate for tree interaction
+  
+  // Orb tree hint trigger
+  private readonly TREE_HINT_TRIGGER_X = 2036; // X position to trigger tree hint dialog
+  private treeHintTriggered = false; // Track if tree hint dialog has been shown
+  private treeHintMessages = [
+    "Los arboles milenarios te daran la respuesta",
+    "Probá abrazandolo y fijate que te dice"
+  ];
+  private currentTreeHintIndex = 0;
+  
+  // Tree interaction messages
+  private treeInteractionMessages = [
+    "Hola... tu regalo no está aquí, pero lo podrás encontrar donde reinan los felinos.",
+  ];
+  private currentTreeInteractionIndex = 0;
 
   constructor() {
     super('Level0');
@@ -236,7 +261,8 @@ export class Level0 extends Scene {
         attack: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.X),
         focus: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C),
         dash: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
-        space: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
+        space: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
+        interact: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.A)
       };
     }
 
@@ -493,11 +519,11 @@ export class Level0 extends Scene {
     const promptText = this.add.text(
       dialogX, 
       dialogY + 30, // Below the main text
-      'Continuar (espacio)', 
+      'Espacio para saltar', 
       {
         fontFamily: 'Arial',
         fontSize: 14,
-        color: '#ffffff',
+        color: '#999999',
         align: 'right',
         padding: { x: 8, y: 4 }
       }
@@ -533,10 +559,37 @@ export class Level0 extends Scene {
             this.typewriterTimer.destroy();
             this.typewriterTimer = null;
           }
+          
+          // Auto-advance after a brief pause to let player read
+          this.autoAdvanceTimer = this.time.delayedCall(1500, () => { // 1.5 second pause after typing finishes
+            this.autoAdvanceDialog();
+          });
         }
       },
       repeat: this.currentDialogText.length - 1
     });
+  }
+  
+  private autoAdvanceDialog(): void {
+    if (this.isDialogActive && this.dialogBox) {
+      const orb = (this.dialogBox as any).orb;
+      
+      // Clean up timer reference
+      this.autoAdvanceTimer = null;
+      
+      // Clean up current dialog
+      this.dialogBox.destroy();
+      this.dialogBox = null;
+      this.dialogText = null;
+      this.isDialogActive = false;
+      this.currentDialogText = '';
+      this.dialogCharIndex = 0;
+      
+      // Tell orb to advance to next dialog or finish
+      if (orb && orb.finishTalking) {
+        orb.finishTalking();
+      }
+    }
   }
   
   private skipTypewriterEffect(): void {
@@ -546,6 +599,17 @@ export class Level0 extends Scene {
       this.typewriterTimer = null;
       this.dialogText.setText(this.currentDialogText);
       this.dialogCharIndex = this.currentDialogText.length;
+      
+      // Cancel any existing auto-advance timer
+      if (this.autoAdvanceTimer) {
+        this.autoAdvanceTimer.destroy();
+        this.autoAdvanceTimer = null;
+      }
+      
+      // Auto-advance immediately after skipping (shorter pause)
+      this.autoAdvanceTimer = this.time.delayedCall(500, () => { // 0.5 second pause when skipped
+        this.autoAdvanceDialog();
+      });
     }
   }
 
@@ -558,6 +622,12 @@ export class Level0 extends Scene {
     if (this.typewriterTimer) {
       this.typewriterTimer.destroy();
       this.typewriterTimer = null;
+    }
+    
+    // Clean up any pending auto-advance timers
+    if (this.autoAdvanceTimer) {
+      this.autoAdvanceTimer.destroy();
+      this.autoAdvanceTimer = null;
     }
     
     // Clean up dialog elements
@@ -595,15 +665,502 @@ export class Level0 extends Scene {
     }
   }
 
+  private checkForTreeInteraction(): void {
+    if (this.isDialogActive) {
+      this.hideInteractionHint();
+      return;
+    }
+
+    // Log player position for debugging
+    console.log(`Player position: (${Math.round(this.player.x)}, ${Math.round(this.player.y)})`);
+
+    // Check if player is within tree interaction area (simple rectangle check)
+    const isNearTree = (
+      this.player.x >= this.TREE_X_MIN &&
+      this.player.x <= this.TREE_X_MAX &&
+      this.player.y >= this.TREE_Y_MIN &&
+      this.player.y <= this.TREE_Y_MAX
+    );
+
+    if (isNearTree && !this.nearTree) {
+      console.log("Player is near the tree! Showing hug hint!");
+      this.nearTree = true;
+      this.showInteractionHint();
+    } else if (!isNearTree && this.nearTree) {
+      console.log("Player left tree area. Hiding hint.");
+      this.nearTree = false;
+      this.hideInteractionHint();
+    }
+  }
+
+  private checkForTreeHintTrigger(): void {
+    // Check if player has reached the tree hint trigger position
+    if (!this.treeHintTriggered && this.player.x >= this.TREE_HINT_TRIGGER_X && !this.isDialogActive) {
+      console.log(`Player reached tree hint trigger at X: ${this.TREE_HINT_TRIGGER_X}`);
+      this.treeHintTriggered = true;
+      this.showTreeHintDialog();
+    }
+  }
+
+  private showTreeHintDialog(): void {
+    // Start the custom tree hint dialog sequence
+    this.currentTreeHintIndex = 0;
+    this.showNextTreeHintMessage();
+  }
+
+  private showNextTreeHintMessage(): void {
+    if (this.currentTreeHintIndex >= this.treeHintMessages.length) {
+      // All messages shown, orb can go back to following
+      return;
+    }
+
+    const treeHintText = this.treeHintMessages[this.currentTreeHintIndex];
+    
+    // Show the tree hint dialog using the existing system
+    this.showTreeHintCustomDialog(treeHintText);
+  }
+
+  private showTreeHintCustomDialog(text: string): void {
+    if (this.isDialogActive) return;
+    
+    this.isDialogActive = true;
+    
+    // Position orb for talking
+    this.orb.setPosition(this.player.x + 40, this.player.y - 60);
+    
+    const camera = this.cameras.main;
+    
+    // Smaller dialog positioned above center
+    const dialogX = camera.centerX;
+    const dialogY = camera.centerY - 110;
+    
+    const dialogBg = this.add.rectangle(
+      dialogX, 
+      dialogY, 
+      600, 100, // Smaller: 600x100
+      0x000000, 1 // Dark background
+    );
+    dialogBg.setScrollFactor(0); // Fixed to camera
+    dialogBg.setDepth(2000); // Very high depth
+    
+    // Add a border
+    const dialogBorder = this.add.rectangle(
+      dialogX, 
+      dialogY, 
+      604, 104, // Border slightly bigger
+      0x000000, 1 // Black border
+    );
+    dialogBorder.setScrollFactor(0);
+    dialogBorder.setDepth(1999); // Behind the background
+    
+    // Dialog text - start with empty text for typewriter effect
+    this.currentDialogText = text;
+    this.dialogCharIndex = 0;
+    
+    this.dialogText = this.add.text(
+      dialogX, 
+      dialogY - 10, // Slightly above center of dialog
+      '', // Start with empty text
+      {
+        fontFamily: 'Arial',
+        fontSize: 18,
+        color: '#ffffff',
+        align: 'center',
+        padding: { x: 15, y: 8 },
+        wordWrap: { width: 550 }
+      }
+    );
+    this.dialogText.setOrigin(0.5);
+    this.dialogText.setScrollFactor(0);
+    this.dialogText.setDepth(2001);
+    
+    // Prompt text
+    const promptText = this.add.text(
+      dialogX, 
+      dialogY + 30, // Below the main text
+      'Espacio para saltar', 
+      {
+        fontFamily: 'Arial',
+        fontSize: 14,
+        color: '#999999',
+        align: 'right',
+        padding: { x: 8, y: 4 }
+      }
+    );
+    promptText.setOrigin(0.5);
+    promptText.setScrollFactor(0);
+    promptText.setDepth(2002);
+    
+    // Start typewriter effect
+    this.startTreeHintTypewriter();
+    
+    // Store elements for cleanup
+    this.dialogBox = this.add.container(0, 0);
+    this.dialogBox.add([dialogBorder, dialogBg, this.dialogText, promptText]);
+  }
+
+  private startTreeHintTypewriter(): void {
+    // Clear any existing timer
+    if (this.typewriterTimer) {
+      this.typewriterTimer.destroy();
+    }
+    
+    // Create timer that adds one character every 50ms
+    this.typewriterTimer = this.time.addEvent({
+      delay: 50, // 50ms between characters
+      callback: () => {
+        if (this.dialogCharIndex < this.currentDialogText.length && this.dialogText) {
+          // Add next character
+          this.dialogCharIndex++;
+          const visibleText = this.currentDialogText.substring(0, this.dialogCharIndex);
+          this.dialogText.setText(visibleText);
+        } else {
+          // Finished typing, cleanup timer
+          if (this.typewriterTimer) {
+            this.typewriterTimer.destroy();
+            this.typewriterTimer = null;
+          }
+          
+          // Auto-advance after a brief pause to let player read
+          this.autoAdvanceTimer = this.time.delayedCall(1500, () => { // 1.5 second pause after typing finishes
+            this.autoAdvanceTreeHintDialog();
+          });
+        }
+      },
+      repeat: this.currentDialogText.length - 1
+    });
+  }
+
+  private skipAnyTypewriter(): void {
+    // Unified method to skip typewriter effect for any active dialog
+    if (this.typewriterTimer && this.dialogText) {
+      this.typewriterTimer.destroy();
+      this.typewriterTimer = null;
+      this.dialogText.setText(this.currentDialogText);
+      this.dialogCharIndex = this.currentDialogText.length;
+      
+      // Cancel any existing auto-advance timer
+      if (this.autoAdvanceTimer) {
+        this.autoAdvanceTimer.destroy();
+        this.autoAdvanceTimer = null;
+      }
+      
+      // Determine which type of dialog to auto-advance
+      if (this.treeHintTriggered && this.currentTreeHintIndex < this.treeHintMessages.length) {
+        // Tree hint dialog
+        this.autoAdvanceTimer = this.time.delayedCall(500, () => {
+          this.autoAdvanceTreeHintDialog();
+        });
+      } else if (this.nearTree) {
+        // Tree interaction dialog (when hugging the tree)
+        this.autoAdvanceTimer = this.time.delayedCall(500, () => {
+          this.autoAdvanceTreeInteractionDialog();
+        });
+      } else {
+        // Regular orb dialog
+        this.autoAdvanceTimer = this.time.delayedCall(500, () => {
+          this.autoAdvanceDialog();
+        });
+      }
+    }
+  }
+
+  private skipTreeHintTypewriter(): void {
+    // Skip to the end of the typewriter effect for tree hint dialog
+    if (this.typewriterTimer && this.dialogText) {
+      this.typewriterTimer.destroy();
+      this.typewriterTimer = null;
+      this.dialogText.setText(this.currentDialogText);
+      this.dialogCharIndex = this.currentDialogText.length;
+      
+      // Cancel any existing auto-advance timer
+      if (this.autoAdvanceTimer) {
+        this.autoAdvanceTimer.destroy();
+        this.autoAdvanceTimer = null;
+      }
+      
+      // Auto-advance immediately after skipping (shorter pause)
+      this.autoAdvanceTimer = this.time.delayedCall(500, () => { // 0.5 second pause when skipped
+        this.autoAdvanceTreeHintDialog();
+      });
+    }
+  }
+
+  private autoAdvanceTreeHintDialog(): void {
+    if (!this.isDialogActive || !this.dialogBox) return;
+    
+    // Clean up timer reference
+    this.autoAdvanceTimer = null;
+    
+    // Clean up current dialog
+    this.dialogBox.destroy();
+    this.dialogBox = null;
+    this.dialogText = null;
+    this.isDialogActive = false;
+    this.currentDialogText = '';
+    this.dialogCharIndex = 0;
+    
+    // Advance to next message
+    this.currentTreeHintIndex++;
+    
+    // Check if there are more messages
+    if (this.currentTreeHintIndex < this.treeHintMessages.length) {
+      // Show next message after a brief pause
+      this.time.delayedCall(500, () => {
+        this.showNextTreeHintMessage();
+      });
+    } else {
+      // All messages shown, tree hint sequence complete
+      console.log("Tree hint dialog sequence completed!");
+    }
+  }
+
+  private showInteractionHint(): void {
+    if (this.interactionHint) {
+      this.interactionHint.setVisible(true);
+      return;
+    }
+
+    this.interactionHint = this.add.text(
+      0, 0,
+      'Abrazar (A)',
+      {
+        fontSize: '14px',  // Smaller font
+        color: '#ffffff',
+        backgroundColor: '#000000',
+        padding: { x: 8, y: 4 },  // Smaller padding
+        stroke: '#ffffff',
+        strokeThickness: 1
+      }
+    );
+    
+    this.interactionHint.setOrigin(0.5, 0.5);
+    this.interactionHint.setDepth(500);
+    this.interactionHint.setScrollFactor(1); // Scroll with world
+    
+    // Position in the middle of the tree interaction area, raised 32px
+    const treeMiddleX = (this.TREE_X_MIN + this.TREE_X_MAX) / 2;
+    const treeMiddleY = (this.TREE_Y_MIN + this.TREE_Y_MAX) / 2 - 32; // Raised 32px
+    this.interactionHint.setPosition(treeMiddleX, treeMiddleY);
+  }
+
+  private updateHintPosition(): void {
+    // No longer needed since hint is positioned at tree center and scrolls with world
+  }
+
+  private hideInteractionHint(): void {
+    if (this.interactionHint) {
+      this.interactionHint.setVisible(false);
+    }
+  }
+
+  private handleInteraction(): void {
+    console.log("A key pressed! nearTree:", this.nearTree, "isDialogActive:", this.isDialogActive);
+    
+    if (!this.nearTree || this.isDialogActive) {
+      return;
+    }
+
+    console.log("Starting tree hug dialog sequence!");
+    // Start the tree interaction dialog sequence
+    this.currentTreeInteractionIndex = 0;
+    this.showNextTreeInteractionMessage();
+  }
+
+  private showNextTreeInteractionMessage(): void {
+    if (this.currentTreeInteractionIndex >= this.treeInteractionMessages.length) {
+      // All messages shown, interaction complete
+      console.log("Tree interaction sequence completed!");
+      return;
+    }
+
+    const message = this.treeInteractionMessages[this.currentTreeInteractionIndex];
+    
+    // Show the tree interaction dialog
+    this.showInteractionDialog(message, true);
+  }
+
+  private showInteractionDialog(text: string, useGreenBackground: boolean = false): void {
+    if (this.isDialogActive) {
+      return;
+    }
+
+    this.hideInteractionHint();
+    this.isDialogActive = true;
+
+    // Stop player movement
+    this.player.setVelocityX(0);
+
+    const camera = this.cameras.main;
+    
+    // Smaller dialog positioned above center (same style as orb dialogs)
+    const dialogX = camera.centerX;
+    const dialogY = camera.centerY - 110;
+    
+    // Choose background color based on message
+    const backgroundColor = useGreenBackground ? 0x042f04 : 0x000000; // Dark green or black
+    const borderColor = useGreenBackground ? 0x042f04 : 0x000000; // Dark green or black
+    
+    const dialogBg = this.add.rectangle(
+      dialogX, 
+      dialogY, 
+      600, 100, // Same size as orb dialogs
+      backgroundColor, 1 // Dark background (black or green)
+    );
+    dialogBg.setScrollFactor(0); // Fixed to camera
+    dialogBg.setDepth(2000); // Very high depth
+    
+    // Add a border
+    const dialogBorder = this.add.rectangle(
+      dialogX, 
+      dialogY, 
+      604, 104, // Border slightly bigger
+      borderColor, 1 // Border color matches background
+    );
+    dialogBorder.setScrollFactor(0);
+    dialogBorder.setDepth(1999); // Behind the background
+
+    // Dialog text - start with empty text for typewriter effect
+    this.currentDialogText = text;
+    this.dialogCharIndex = 0;
+    
+    this.dialogText = this.add.text(
+      dialogX, 
+      dialogY - 10, // Slightly above center of dialog
+      '', // Start with empty text
+      {
+        fontFamily: 'Arial',
+        fontSize: 18,
+        color: '#ffffff',
+        align: 'center',
+        padding: { x: 15, y: 8 },
+        wordWrap: { width: 550 }
+      }
+    );
+    this.dialogText.setOrigin(0.5);
+    this.dialogText.setScrollFactor(0);
+    this.dialogText.setDepth(2001);
+
+    // Prompt text
+    const promptText = this.add.text(
+      dialogX, 
+      dialogY + 30, // Below the main text
+      'Espacio para saltar', 
+      {
+        fontFamily: 'Arial',
+        fontSize: 14,
+        color: '#999999',
+        align: 'right',
+        padding: { x: 8, y: 4 }
+      }
+    );
+    promptText.setOrigin(0.5);
+    promptText.setScrollFactor(0);
+    promptText.setDepth(2002);
+
+    // Store elements for cleanup
+    this.dialogBox = this.add.container(0, 0);
+    this.dialogBox.add([dialogBorder, dialogBg, this.dialogText, promptText]);
+    
+    // Start typewriter effect
+    this.startInteractionTypewriter();
+  }
+
+  private startInteractionTypewriter(): void {
+    // Clear any existing timer
+    if (this.typewriterTimer) {
+      this.typewriterTimer.destroy();
+    }
+
+    // Create timer that adds one character every 50ms
+    this.typewriterTimer = this.time.addEvent({
+      delay: 50, // 50ms between characters
+      callback: () => {
+        if (this.dialogCharIndex < this.currentDialogText.length && this.dialogText) {
+          // Add next character
+          this.dialogCharIndex++;
+          const visibleText = this.currentDialogText.substring(0, this.dialogCharIndex);
+          this.dialogText.setText(visibleText);
+        } else {
+          // Finished typing, cleanup timer
+          if (this.typewriterTimer) {
+            this.typewriterTimer.destroy();
+            this.typewriterTimer = null;
+          }
+          
+          // Auto-advance after a brief pause to let player read
+          this.autoAdvanceTimer = this.time.delayedCall(2000, () => { // 2 second pause for tree dialog
+            this.autoAdvanceTreeInteractionDialog();
+          });
+        }
+      },
+      repeat: this.currentDialogText.length - 1
+    });
+  }
+
+  private autoAdvanceTreeInteractionDialog(): void {
+    if (!this.isDialogActive || !this.dialogBox) return;
+    
+    // Clean up timer reference
+    this.autoAdvanceTimer = null;
+    
+    // Clean up current dialog
+    this.dialogBox.destroy();
+    this.dialogBox = null;
+    this.dialogText = null;
+    this.isDialogActive = false;
+    this.currentDialogText = '';
+    this.dialogCharIndex = 0;
+    
+    // Advance to next message
+    this.currentTreeInteractionIndex++;
+    
+    // Check if there are more messages
+    if (this.currentTreeInteractionIndex < this.treeInteractionMessages.length) {
+      // Show next message after a brief pause
+      this.time.delayedCall(500, () => {
+        this.showNextTreeInteractionMessage();
+      });
+    } else {
+      // All messages shown, tree interaction sequence complete
+      console.log("Tree interaction dialog sequence completed!");
+    }
+  }
+
+  private closeInteractionDialog(): void {
+    // Clean up typewriter timer
+    if (this.typewriterTimer) {
+      this.typewriterTimer.destroy();
+      this.typewriterTimer = null;
+    }
+    
+    // Clean up any pending auto-advance timers
+    if (this.autoAdvanceTimer) {
+      this.autoAdvanceTimer.destroy();
+      this.autoAdvanceTimer = null;
+    }
+
+    // Clean up dialog elements
+    if (this.dialogBox) {
+      this.dialogBox.destroy();
+      this.dialogBox = null;
+    }
+    
+    this.dialogText = null;
+    this.isDialogActive = false;
+    this.currentDialogText = '';
+    this.dialogCharIndex = 0;
+    
+    console.log("Tree interaction dialog closed!");
+  }
+
   update(time: number, delta: number) {
     // Handle dialog input first
     if (this.isDialogActive && this.actionKeys.space) {
       if (Phaser.Input.Keyboard.JustDown(this.actionKeys.space)) {
-        // If typewriter is still active, skip to end. Otherwise close dialog
+        // Skip typewriter effect for any active dialog
         if (this.typewriterTimer) {
-          this.skipTypewriterEffect();
-        } else {
-          this.closeDialog();
+          this.skipAnyTypewriter();
         }
         return; // Don't process other input while dialog is active
       }
@@ -631,6 +1188,25 @@ export class Level0 extends Scene {
 
     // Don't process game input if dialog is active
     if (this.isDialogActive) {
+      // Stop player movement during dialog
+      this.player.setLeftPressed(false);
+      this.player.setRightPressed(false);
+      this.player.setJumpPressed(false, false);
+      this.player.setAttackPressed(false, false);
+      this.player.setDashPressed(false, false);
+      this.player.setLookUpPressed(false);
+      this.player.setLookDownPressed(false);
+      
+      // Set player velocity to zero to stop immediately
+      const playerBody = this.player.body as Phaser.Physics.Arcade.Body;
+      if (playerBody) {
+        playerBody.setVelocityX(0);
+        // Don't stop Y velocity completely to allow gravity/falling
+      }
+      
+      // Still update player for animations and physics
+      this.player.update(time, delta);
+      
       // Still update orb during dialog
       this.orb.update(time);
       this.updateParallax();
@@ -648,12 +1224,18 @@ export class Level0 extends Scene {
     const attackPressed = this.actionKeys.attack.isDown;
     const focusPressed = this.actionKeys.focus.isDown;
     const dashPressed = this.actionKeys.dash.isDown;
+    const interactPressed = this.actionKeys.interact.isDown;
 
     // Input state tracking for "just pressed" detection
     const jumpJustPressed = jumpPressed && !this.wasJumpDown;
     const attackJustPressed = attackPressed && !this.wasAttackDown;
     const focusJustPressed = focusPressed && !this.wasFocusDown;
     const dashJustPressed = dashPressed && !this.wasDashDown;
+    
+    // Handle A key for tree hugging
+    if (Phaser.Input.Keyboard.JustDown(this.actionKeys.interact)) {
+      this.handleInteraction();
+    }
 
     // Update player input state
     this.player.setLeftPressed(leftPressed);
@@ -689,6 +1271,12 @@ export class Level0 extends Scene {
 
     // Apply parallax scrolling to background
     this.updateParallax();
+    
+    // Check if player has reached the tree hint trigger
+    this.checkForTreeHintTrigger();
+    
+    // Check if player is near the tree
+    this.checkForTreeInteraction();
 
     // Track input state for next frame
     this.wasJumpDown = jumpPressed;
